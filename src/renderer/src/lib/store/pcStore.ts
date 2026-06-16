@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { getSetting, setSetting } from '@/lib/db/content'
 import { getActiveCampaignId } from './activeCampaign'
 import { defaultAbilities, type Abilities, type AbilityKey } from '@/lib/dnd/character'
+import { useUiStore } from './uiStore'
 
 export interface SpellSlotLevel {
   level: number
@@ -221,6 +222,8 @@ interface PcState {
   restoreSlot: (id: string, level: number) => void
   longRest: () => void
   shortRest: () => void
+  longRestOne: (id: string) => void
+  shortRestOne: (id: string) => void
 }
 
 export const usePcStore = create<PcState>((set, get) => {
@@ -279,20 +282,25 @@ export const usePcStore = create<PcState>((set, get) => {
     },
 
     longRest: () => {
+      const pcs = get().pcs
       set((s) => ({
         pcs: s.pcs.map((p) => ({
           ...p,
+          currentHp: p.maxHp,
           tempHp: 0,
           slots: p.slots.map((sl) => ({ ...sl, current: sl.max })),
           actions: p.actions.map((a) => ({ ...a, usesCurrent: a.usesMax }))
         }))
       }))
       persist()
+      const n = pcs.length
+      useUiStore.getState().showToast(
+        `Long rest — ${n} character${n !== 1 ? 's' : ''} fully restored`
+      )
     },
 
     shortRest: () => {
-      // Warlock pact slots come back on a short rest; so do short-rest action uses
-      // is left to the DM, but pact magic is the common case.
+      const pcs = get().pcs
       set((s) => ({
         pcs: s.pcs.map((p) =>
           /warlock/i.test(p.charClass)
@@ -301,6 +309,51 @@ export const usePcStore = create<PcState>((set, get) => {
         )
       }))
       persist()
+      const n = pcs.length
+      useUiStore.getState().showToast(
+        `Short rest — ${n} character${n !== 1 ? 's' : ''} rested`
+      )
+    },
+
+    longRestOne: (id) => {
+      const pc = get().pcs.find((p) => p.id === id)
+      set((s) => ({
+        pcs: s.pcs.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                currentHp: p.maxHp,
+                tempHp: 0,
+                slots: p.slots.map((sl) => ({ ...sl, current: sl.max })),
+                actions: p.actions.map((a) => ({ ...a, usesCurrent: a.usesMax }))
+              }
+            : p
+        )
+      }))
+      persist()
+      useUiStore.getState().showToast(
+        `Long rest — ${pc?.name ?? 'Character'} fully restored`
+      )
+    },
+
+    shortRestOne: (id) => {
+      const pc = get().pcs.find((p) => p.id === id)
+      set((s) => ({
+        pcs: s.pcs.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                slots: /warlock/i.test(p.charClass)
+                  ? p.slots.map((sl) => ({ ...sl, current: sl.max }))
+                  : p.slots
+              }
+            : p
+        )
+      }))
+      persist()
+      useUiStore.getState().showToast(
+        `Short rest — ${pc?.name ?? 'Character'} rested`
+      )
     }
   }
 })

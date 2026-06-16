@@ -204,8 +204,8 @@ function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
 
 export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
   const updatePc = usePcStore((s) => s.updatePc)
-  const longRest = usePcStore((s) => s.longRest)
-  const shortRest = usePcStore((s) => s.shortRest)
+  const longRestOne = usePcStore((s) => s.longRestOne)
+  const shortRestOne = usePcStore((s) => s.shortRestOne)
   const items = useContentStore((s) => s.items)
 
   const pb = proficiencyBonus(pc.level)
@@ -357,10 +357,10 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
       <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
         {/* rest buttons */}
         <div className="flex items-center gap-2">
-          <button type="button" className="btn-outline flex-1 text-xs" onClick={() => shortRest()}>
+          <button type="button" className="btn-outline flex-1 text-xs" onClick={() => shortRestOne(pc.id)}>
             Short rest
           </button>
-          <button type="button" className="btn-outline flex-1 text-xs" onClick={() => longRest()}>
+          <button type="button" className="btn-outline flex-1 text-xs" onClick={() => longRestOne(pc.id)}>
             Long rest
           </button>
           <button

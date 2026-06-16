@@ -53,6 +53,11 @@ interface UiState {
   setMaxPanelColumns: (n: number) => void
   dismissToast: () => void
 
+  /** General-purpose accent toast (rest messages, etc.). */
+  appToast: string | null
+  showToast: (msg: string) => void
+  hideToast: () => void
+
   /** Whether the voice transcript + keyword feed dock is visible. */
   feedOpen: boolean
   setFeedOpen: (v: boolean) => void
@@ -113,6 +118,10 @@ export const useUiStore = create<UiState>((set) => ({
       return { maxPanelColumns: n, drawerColumns: repack(s.drawerColumns, n) }
     }),
   dismissToast: () => set({ drawerToast: null }),
+
+  appToast: null,
+  showToast: (msg) => set({ appToast: msg }),
+  hideToast: () => set({ appToast: null }),
 
   feedOpen: false,
   setFeedOpen: (v) => set({ feedOpen: v }),
