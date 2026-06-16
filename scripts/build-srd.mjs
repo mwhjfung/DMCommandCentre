@@ -583,6 +583,157 @@ async function fetchClasses() {
   return entries
 }
 
+// ---- feat mappers -----------------------------------------------------------
+
+// Mechanical bonuses for specific SRD feats (parsed from feat text)
+const FEAT_BONUSES = {
+  'Alert':       { initiativeBonus: 5 },
+  'Dual Wielder':{ acBonus: 1 },
+  'Mobile':      { speedBonus: 10 },
+  'Observant':   { passivePerceptionBonus: 5, passiveInvestigationBonus: 5 },
+}
+
+function mapPrerequisite(prereq) {
+  if (!prereq?.length) return undefined
+  const parts = []
+  for (const p of prereq) {
+    if (p.ability) {
+      for (const ab of p.ability) {
+        for (const [key, val] of Object.entries(ab)) {
+          parts.push(`${ABILITY[key] ?? key} ${val}+`)
+        }
+      }
+    }
+    if (p.level) {
+      const lvl = typeof p.level === 'number' ? `Level ${p.level}` : `Level ${p.level.level ?? ''}${p.level.class?.name ? ` ${p.level.class.name}` : ''}`
+      parts.push(lvl.trim())
+    }
+    if (p.spellcasting || p.spellcastingFeature || p.spellcastingPrepared) parts.push('Spellcasting')
+    if (p.proficiency) {
+      for (const prof of p.proficiency) {
+        for (const [type, val] of Object.entries(prof)) {
+          if (val) parts.push(`${type} proficiency`)
+        }
+      }
+    }
+    if (p.race) {
+      parts.push(p.race.map(r => r.displayEntry ? stripTags(r.displayEntry) : (r.name ?? '')).filter(Boolean).join(' or '))
+    }
+    if (p.other) parts.push(stripTags(p.other))
+  }
+  return parts.filter(Boolean).join('; ') || undefined
+}
+
+function mapFeat(r) {
+  const prerequisite = mapPrerequisite(r.prerequisite)
+  const description = renderEntries(r.entries)
+  const bonuses = FEAT_BONUSES[r.name] ?? {}
+  return {
+    id: `srd:feat:${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    type: 'feat',
+    source: 'srd',
+    slug: r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name: r.name,
+    summary: prerequisite ? `Prerequisite: ${prerequisite}` : 'Feat',
+    tags: [],
+    notes: '',
+    createdAt: now,
+    updatedAt: now,
+    data: { prerequisite: prerequisite || undefined, description, ...bonuses }
+  }
+}
+
+async function fetchFeats() {
+  console.log('  Fetching feats (PHB)…')
+  const { feat } = await getJson(`${RAW}/feats.json`)
+  // PHB feats — the classic 2014 feats players expect
+  return feat.filter((f) => f.source === 'PHB').map(mapFeat)
+}
+
+// ---- background mappers -----------------------------------------------------
+
+function renderProfList(entries) {
+  if (!entries?.length) return undefined
+  const parts = []
+  for (const entry of entries) {
+    for (const [key, val] of Object.entries(entry)) {
+      if (key === 'choose') {
+        const from = Array.isArray(val.from) ? val.from : []
+        const count = val.count ?? 1
+        if (from.length) parts.push(`Choose ${count}: ${from.map(s => s[0].toUpperCase() + s.slice(1)).join(', ')}`)
+        else parts.push(`Choose ${count}`)
+      } else if (key === 'anyStandard') {
+        parts.push(`Any ${val} standard language${val > 1 ? 's' : ''}`)
+      } else if (val === true) {
+        parts.push(key[0].toUpperCase() + key.slice(1))
+      } else if (typeof val === 'string' && val !== 'false') {
+        parts.push(`${key[0].toUpperCase() + key.slice(1)}`)
+      }
+    }
+  }
+  return parts.filter(Boolean).join(', ') || undefined
+}
+
+function mapBackground(r) {
+  // Feature block is usually an 'entries' entry whose name starts with "Feature:"
+  const featureEntry = (r.entries ?? []).find(
+    (e) => e && typeof e === 'object' && typeof e.name === 'string' && e.name.startsWith('Feature:')
+  )
+  const featureName = featureEntry ? featureEntry.name.replace(/^Feature:\s*/, '') : undefined
+  const featureDescription = featureEntry ? renderEntries(featureEntry.entries) : undefined
+
+  // Description from non-feature, non-suggested entries
+  const descEntries = (r.entries ?? []).filter(
+    (e) => !e?.name?.startsWith('Feature:') && !e?.name?.startsWith('Suggested')
+  )
+  const description = renderEntries(descEntries)
+
+  // Starting equipment — grab first option, flatten items
+  let equipment
+  if (r.startingEquipment?.length) {
+    const opts = r.startingEquipment[0]
+    const items = (Array.isArray(opts) ? opts : []).flatMap((item) => {
+      if (typeof item === 'string') return [stripTags(item)]
+      if (item?.item) return [stripTags(item.item)]
+      if (item?.special) return [stripTags(item.special)]
+      if (item?.value) return [`${item.value} gp`]
+      return []
+    })
+    equipment = items.slice(0, 8).join(', ') || undefined
+  }
+
+  return {
+    id: `srd:background:${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    type: 'background',
+    source: 'srd',
+    slug: r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name: r.name,
+    summary: featureName ? `Feature: ${featureName}` : 'Background',
+    tags: [],
+    notes: '',
+    createdAt: now,
+    updatedAt: now,
+    data: {
+      description,
+      feature: featureName,
+      featureDescription,
+      skillProficiencies: renderProfList(r.skillProficiencies),
+      toolProficiencies: renderProfList(r.toolProficiencies),
+      languages: renderProfList(r.languageProficiencies),
+      equipment
+    }
+  }
+}
+
+async function fetchBackgrounds() {
+  console.log('  Fetching backgrounds (PHB)…')
+  const { background } = await getJson(`${RAW}/backgrounds.json`)
+  // PHB backgrounds — exclude variants (named "Variant ...")
+  return background
+    .filter((b) => b.source === 'PHB' && !b.name.startsWith('Variant') && b.name !== 'Custom Background')
+    .map(mapBackground)
+}
+
 // ---- main -------------------------------------------------------------------
 
 async function main() {
@@ -615,6 +766,14 @@ async function main() {
   const subCount = classes.filter((e) => e.type === 'subclass').length
   console.log(`  → ${classCount} classes, ${subCount} subclasses`)
   all.push(...classes)
+
+  const feats = await fetchFeats()
+  console.log(`  → ${feats.length} feats`)
+  all.push(...feats)
+
+  const backgrounds = await fetchBackgrounds()
+  console.log(`  → ${backgrounds.length} backgrounds`)
+  all.push(...backgrounds)
 
   // Deduplicate by id (shouldn't happen, but safety net)
   const seen = new Set()

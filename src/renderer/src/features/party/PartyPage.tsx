@@ -3,6 +3,7 @@ import { Plus, Moon, Coffee, Users, Upload, Download } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
 import { usePcStore, type PcUnit } from '@/lib/store/pcStore'
+import { useUiStore } from '@/lib/store/uiStore'
 import { exportCharacters } from '@/lib/data/partyData'
 import { CharacterSheet } from './CharacterSheet'
 import { CharacterDialog } from './CharacterDialog'
@@ -15,12 +16,21 @@ export function PartyPage(): JSX.Element {
   const pcs = usePcStore((s) => s.pcs)
   const longRest = usePcStore((s) => s.longRest)
   const shortRest = usePcStore((s) => s.shortRest)
+  const activePcId = useUiStore((s) => s.activePcId)
+  const setActivePcId = useUiStore((s) => s.setActivePcId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [status, setStatus] = useState('')
 
   const selected = pcs.find((p) => p.id === selectedId) ?? pcs[0] ?? null
+
+  // Jump to a PC when navigated here from global search
+  useEffect(() => {
+    if (!activePcId) return
+    setSelectedId(activePcId)
+    setActivePcId(null)
+  }, [activePcId, setActivePcId])
 
   useEffect(() => {
     if (!status) return

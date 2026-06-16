@@ -20,4 +20,6 @@ export const SRD_GROUPS: SrdGroup[] = [
   { label: 'Weapons',             types: ['weapon'],             fetch: byType(['weapon'])             },
   { label: 'Conditions',          types: ['condition'],          fetch: byType(['condition'])          },
   { label: 'Classes & subclasses',types: ['class', 'subclass'], fetch: byType(['class', 'subclass']) },
+  { label: 'Feats',               types: ['feat'],               fetch: byType(['feat'])               },
+  { label: 'Backgrounds',         types: ['background'],         fetch: byType(['background'])         },
 ]

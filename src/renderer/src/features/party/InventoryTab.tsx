@@ -180,7 +180,7 @@ export function InventoryTab({ pc }: { pc: PcUnit }): JSX.Element {
   const attuned = items.filter((i) => i.attuned).length
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3 p-6">
+    <div className="max-w-3xl space-y-3 p-6">
       <div className="flex items-center justify-between">
         <span className={cn('text-xs', attuned > 3 ? 'font-medium text-danger' : 'text-ink-muted')}>
           Attuned {attuned}/3
@@ -192,7 +192,7 @@ export function InventoryTab({ pc }: { pc: PcUnit }): JSX.Element {
       </div>
 
       {items.length === 0 ? (
-        <p className="py-6 text-center text-sm text-ink-muted">Nothing carried yet.</p>
+        <p className="py-6 text-sm text-ink-muted">Nothing carried yet.</p>
       ) : (
         <div className="space-y-1.5">
           {items.map((i) => (

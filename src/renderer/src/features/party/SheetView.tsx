@@ -206,6 +206,14 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
   const updatePc = usePcStore((s) => s.updatePc)
   const longRestOne = usePcStore((s) => s.longRestOne)
   const shortRestOne = usePcStore((s) => s.shortRestOne)
+  const [hpAmt, setHpAmt] = useState('')
+
+  const applyHp = (sign: number): void => {
+    const n = Number(hpAmt)
+    if (!n) return
+    updatePc(pc.id, { currentHp: Math.max(0, Math.min(pc.maxHp, pc.currentHp - sign * n)) })
+    setHpAmt('')
+  }
   const items = useContentStore((s) => s.items)
 
   const pb = proficiencyBonus(pc.level)
@@ -395,37 +403,78 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
         {/* HP */}
         <Panel>
           <SectionLabel>Hit points</SectionLabel>
-          <div className="flex items-center gap-3">
-            <div className="flex flex-1 flex-col gap-1">
-              <div className="h-2.5 overflow-hidden rounded-full bg-surface-3">
-                <div
-                  className={cn('h-full transition-all', hpColor(pc.currentHp, pc.maxHp))}
-                  style={{ width: `${pc.maxHp ? Math.min(100, (pc.currentHp / pc.maxHp) * 100) : 0}%` }}
-                />
+          {/* Bar: normal HP + temp HP extension (blue) */}
+          {(() => {
+            const total = pc.maxHp + pc.tempHp
+            const hpPct = total > 0 ? Math.min(100, (pc.currentHp / total) * 100) : 0
+            const tempPct = total > 0 ? (pc.tempHp / total) * 100 : 0
+            return (
+              <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-surface-3">
+                <div className="flex h-full">
+                  <div
+                    className={cn('h-full shrink-0 transition-all', hpColor(pc.currentHp, pc.maxHp))}
+                    style={{ width: `${hpPct}%` }}
+                  />
+                  {pc.tempHp > 0 && (
+                    <div
+                      className="h-full shrink-0 bg-blue-400/80 transition-all"
+                      style={{ width: `${tempPct}%` }}
+                    />
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  value={pc.currentHp}
-                  onChange={(e) => updatePc(pc.id, { currentHp: Math.max(0, Number(e.target.value)) })}
-                  className="w-16 rounded bg-surface px-1 py-0.5 text-center text-lg font-bold text-ink focus:outline-none"
-                />
-                <span className="text-ink-muted">/</span>
-                <input
-                  type="number"
-                  value={pc.maxHp}
-                  onChange={(e) => updatePc(pc.id, { maxHp: Math.max(0, Number(e.target.value)) })}
-                  className="w-16 rounded bg-surface px-1 py-0.5 text-center text-sm text-ink-muted focus:outline-none"
-                />
-              </div>
-            </div>
-            <div className="flex flex-col items-center gap-0.5">
-              <div className="text-[9px] font-semibold uppercase tracking-wider text-ink-muted">Temp</div>
+            )
+          })()}
+          {/* Controls row */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {/* Current HP */}
+            <input
+              type="number"
+              value={pc.currentHp}
+              onChange={(e) => updatePc(pc.id, { currentHp: Math.max(0, Number(e.target.value)) })}
+              className="w-14 rounded bg-surface px-1 py-0.5 text-center text-lg font-bold text-ink focus:outline-none"
+            />
+            <span className="text-ink-muted">/</span>
+            {/* Max HP */}
+            <input
+              type="number"
+              value={pc.maxHp}
+              onChange={(e) => updatePc(pc.id, { maxHp: Math.max(0, Number(e.target.value)) })}
+              className="w-14 rounded bg-surface px-1 py-0.5 text-center text-sm text-ink-muted focus:outline-none"
+            />
+            {/* Damage / heal amount */}
+            <input
+              type="number"
+              value={hpAmt}
+              placeholder="±"
+              onChange={(e) => setHpAmt(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyHp(1)}
+              className="ml-1 w-12 rounded border border-border bg-surface-2 px-1 py-0.5 text-center text-sm focus:outline-none"
+            />
+            <button
+              type="button"
+              className="rounded bg-danger/15 px-1.5 py-0.5 text-xs text-danger hover:bg-danger/25"
+              title="Damage"
+              onClick={() => applyHp(1)}
+            >
+              −
+            </button>
+            <button
+              type="button"
+              className="rounded bg-success/15 px-1.5 py-0.5 text-xs text-success hover:bg-success/25"
+              title="Heal"
+              onClick={() => applyHp(-1)}
+            >
+              +
+            </button>
+            {/* Temp HP */}
+            <div className="ml-auto flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Temp</span>
               <input
                 type="number"
                 value={pc.tempHp}
                 onChange={(e) => updatePc(pc.id, { tempHp: Math.max(0, Number(e.target.value)) })}
-                className="w-14 rounded bg-surface-2 px-1 py-0.5 text-center text-sm text-ink focus:outline-none"
+                className="w-12 rounded bg-surface-2 px-1 py-0.5 text-center text-sm text-ink focus:outline-none"
               />
             </div>
           </div>

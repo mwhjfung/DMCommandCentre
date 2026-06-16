@@ -78,6 +78,8 @@ export interface PcUnit {
   alias?: string
   /** Name of the player controlling this character. */
   playerName?: string
+  /** Links to a library background entry. */
+  backgroundContentId?: string
   race: string
   charClass: string
   level: number
@@ -173,6 +175,7 @@ export function coercePc(raw: RawPc): Omit<PcUnit, 'id'> {
     name: raw.name ?? '',
     alias: raw.alias ?? undefined,
     playerName: (raw as RawPc).playerName ?? undefined,
+    backgroundContentId: raw.backgroundContentId ?? undefined,
     race: raw.race ?? '',
     charClass: raw.charClass ?? '',
     level: raw.level ?? 1,

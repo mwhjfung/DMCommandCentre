@@ -79,6 +79,15 @@ interface UiState {
   openImport: (defaultWorld?: string) => void
   closeImport: () => void
 
+  /** Global search overlay. */
+  searchOpen: boolean
+  openSearch: () => void
+  closeSearch: () => void
+
+  /** PC to auto-select when navigating to the Party page from global search. */
+  activePcId: string | null
+  setActivePcId: (id: string | null) => void
+
   /** Collapsed sidebar (icons only). Persisted. */
   sidebarCollapsed: boolean
   toggleSidebar: () => void
@@ -143,6 +152,13 @@ export const useUiStore = create<UiState>((set) => ({
   importDefaultWorld: '',
   openImport: (defaultWorld = '') => set({ importOpen: true, importDefaultWorld: defaultWorld }),
   closeImport: () => set({ importOpen: false, importDefaultWorld: '' }),
+
+  searchOpen: false,
+  openSearch: () => set({ searchOpen: true }),
+  closeSearch: () => set({ searchOpen: false }),
+
+  activePcId: null,
+  setActivePcId: (id) => set({ activePcId: id }),
 
   sidebarCollapsed: false,
   toggleSidebar: () =>

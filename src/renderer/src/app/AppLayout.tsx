@@ -15,8 +15,6 @@ import { useCampaignStore } from '@/lib/store/campaignStore'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useNotesStore } from '@/lib/store/notesStore'
 import { useUiStore } from '@/lib/store/uiStore'
-import { seedFeats } from '@/lib/feats/seedFeats'
-import { seedBackgrounds } from '@/lib/feats/seedBackgrounds'
 
 export function AppLayout(): JSX.Element {
   const loadCampaigns = useCampaignStore((s) => s.load)
@@ -29,6 +27,19 @@ export function AppLayout(): JSX.Element {
   const loadNotes = useNotesStore((s) => s.load)
   const loadUi = useUiStore((s) => s.loadUi)
   const importOpen = useUiStore((s) => s.importOpen)
+  const openSearch = useUiStore((s) => s.openSearch)
+
+  // Global ⌘K / Ctrl+K shortcut
+  useEffect(() => {
+    const handle = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        openSearch()
+      }
+    }
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [openSearch])
 
   useEffect(() => {
     void (async () => {
@@ -37,8 +48,6 @@ export function AppLayout(): JSX.Element {
       await loadCampaigns()
       await loadSessions()
       await Promise.all([loadContent(), loadCombat(), loadPcs(), loadNotes()])
-      await seedFeats()
-      await seedBackgrounds()
     })()
     void loadVoiceSettings()
     void loadAppSettings()

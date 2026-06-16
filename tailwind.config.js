@@ -52,10 +52,15 @@ module.exports = {
         'feed-in': {
           '0%': { opacity: '0', transform: 'translateY(-6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' }
+        },
+        'toast-in': {
+          '0%': { opacity: '0', transform: 'translateY(10px) scale(0.95)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' }
         }
       },
       animation: {
-        'feed-in': 'feed-in 120ms ease-out'
+        'feed-in': 'feed-in 120ms ease-out',
+        'toast-in': 'toast-in 220ms cubic-bezier(0.16,1,0.3,1)'
       }
     }
   },

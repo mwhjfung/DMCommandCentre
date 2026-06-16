@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Pencil, Trash2, X, Search } from 'lucide-react'
 import { usePcStore, type PcUnit, type PcFeature, type FeatureCategory } from '@/lib/store/pcStore'
 import { useContentStore } from '@/lib/store/contentStore'
+import { useUiStore } from '@/lib/store/uiStore'
 import { cn } from '@/lib/cn'
 import type { ContentEntry } from '@/types/content'
 
@@ -432,7 +433,10 @@ type ModalState =
 
 export function FeaturesTab({ pc }: { pc: PcUnit }): JSX.Element {
   const updatePc = usePcStore((s) => s.updatePc)
+  const openDrawer = useUiStore((s) => s.openDrawer)
+  const items = useContentStore((s) => s.items)
   const [modal, setModal] = useState<ModalState | null>(null)
+  const [activeTab, setActiveTab] = useState<FeatureCategory | 'all'>('all')
 
   const set = (features: PcFeature[]): void => updatePc(pc.id, { features })
   const add = (data: Omit<PcFeature, 'id'>): void =>
@@ -441,9 +445,36 @@ export function FeaturesTab({ pc }: { pc: PcUnit }): JSX.Element {
     set(pc.features.map((f) => (f.id === id ? { ...f, ...data } : f)))
   const remove = (id: string): void => set(pc.features.filter((f) => f.id !== id))
 
+  const visibleCategories = CATEGORIES.filter(({ key }) => activeTab === 'all' || activeTab === key)
+
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
-      {CATEGORIES.map(({ key, label }) => {
+    <div>
+      {/* Sticky category tab bar */}
+      <div className="sticky top-0 z-10 flex overflow-x-auto border-b border-border bg-bg px-4">
+        {([{ key: 'all' as const, label: 'All' }, ...CATEGORIES] as Array<{ key: FeatureCategory | 'all'; label: string }>).map(({ key, label }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveTab(key)}
+            className={cn(
+              'whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition-colors',
+              activeTab === key
+                ? 'border-accent text-ink'
+                : 'border-transparent text-ink-muted hover:text-ink'
+            )}
+          >
+            {label}
+            {key !== 'all' && (
+              <span className="ml-1.5 rounded-full bg-surface-3 px-1.5 text-[10px] text-ink-muted">
+                {pc.features.filter((f) => f.category === key).length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+    <div className="max-w-3xl space-y-6 p-6">
+      {visibleCategories.map(({ key, label }) => {
         const entries = pc.features.filter((f) => f.category === key)
         const isFeat = key === 'feat'
         return (
@@ -470,12 +501,27 @@ export function FeaturesTab({ pc }: { pc: PcUnit }): JSX.Element {
               <p className="text-sm text-ink-muted">None yet.</p>
             ) : (
               <div className="space-y-2">
-                {entries.map((f) => (
+                {entries.map((f) => {
+                  const libEntry = f.contentId ? items.find((i) => i.id === f.contentId) : null
+                  const libData = libEntry?.data as { description?: string; prerequisite?: string; feature?: string; featureDescription?: string } | undefined
+                  const libDesc = libData?.description
+                  const prereq = libData?.prerequisite
+                  return (
                   <div key={f.id} className="panel group rounded-md p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium text-ink">
-                        {f.name || <span className="italic text-ink-muted">Untitled</span>}
-                      </p>
+                      {f.contentId ? (
+                        <button
+                          type="button"
+                          className="text-left font-medium text-ink hover:text-accent"
+                          onClick={() => openDrawer(f.contentId!)}
+                        >
+                          {f.name || <span className="italic text-ink-muted">Untitled</span>}
+                        </button>
+                      ) : (
+                        <p className="font-medium text-ink">
+                          {f.name || <span className="italic text-ink-muted">Untitled</span>}
+                        </p>
+                      )}
                       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button
                           type="button"
@@ -499,13 +545,24 @@ export function FeaturesTab({ pc }: { pc: PcUnit }): JSX.Element {
                         </button>
                       </div>
                     </div>
+                    {prereq && (
+                      <p className="mt-0.5 text-[11px] text-ink-muted">
+                        Prerequisite: {prereq}
+                      </p>
+                    )}
+                    {libDesc && (
+                      <p className="mt-1.5 line-clamp-4 whitespace-pre-wrap text-sm text-ink-muted">
+                        {libDesc}
+                      </p>
+                    )}
                     {f.description && (
-                      <p className="mt-1.5 whitespace-pre-wrap text-sm text-ink-muted">
+                      <p className={cn('text-xs italic text-ink-faint', libDesc ? 'mt-1.5 border-t border-border pt-1.5' : 'mt-1.5')}>
                         {f.description}
                       </p>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </section>
@@ -540,6 +597,7 @@ export function FeaturesTab({ pc }: { pc: PcUnit }): JSX.Element {
           onClose={() => setModal(null)}
         />
       )}
+    </div>
     </div>
   )
 }
