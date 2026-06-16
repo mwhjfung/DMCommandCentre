@@ -1,0 +1,153 @@
+import { create } from 'zustand'
+import type { ContentEntry, ContentType } from '@/types/content'
+import { getSetting, setSetting } from '@/lib/db/content'
+
+/** Most detail panels that can stack vertically in one column. */
+export const MAX_PANELS_PER_COLUMN = 2
+
+export const PANEL_TOO_MANY_MESSAGE =
+  'Got too many things open mate, maybe... sort yourself out and close some?'
+
+/** Re-flow a column layout to fit a new column budget (used on width change). */
+function repack(cols: string[][], maxCols: number): string[][] {
+  const flat = cols.flat()
+  const out: string[][] = []
+  const base = Math.min(Math.max(1, maxCols), flat.length)
+  for (let j = 0; j < base; j += 1) out.push([flat[j]])
+  for (let k = base; k < flat.length; k += 1) {
+    let placed = false
+    for (let j = out.length - 1; j >= 0; j -= 1) {
+      if (out[j].length < MAX_PANELS_PER_COLUMN) {
+        out[j].push(flat[k])
+        placed = true
+        break
+      }
+    }
+    if (!placed) break
+  }
+  return out
+}
+
+export type EditorState =
+  | { kind: 'closed' }
+  | { kind: 'select' }
+  | { kind: 'form'; type: ContentType; entry: ContentEntry | null }
+
+interface UiState {
+  /**
+   * Open detail panels arranged into columns (left→right), each up to
+   * MAX_PANELS_PER_COLUMN tall. Opening tiles a new column on the left; with no
+   * room it stacks onto the right-most column. The DM can drag panels to
+   * re-arrange, so the column structure is stored explicitly. maxPanelColumns is
+   * how many columns fit left of the nav, set from the measured layout.
+   */
+  drawerColumns: string[][]
+  maxPanelColumns: number
+  /** Transient message shown when there's no room left for another panel. */
+  drawerToast: string | null
+  openDrawer: (id: string) => void
+  closePanel: (id: string) => void
+  closeDrawer: () => void
+  /** Replace the column layout (used by drag-to-rearrange). */
+  setDrawerColumns: (cols: string[][]) => void
+  setMaxPanelColumns: (n: number) => void
+  dismissToast: () => void
+
+  /** Whether the voice transcript + keyword feed dock is visible. */
+  feedOpen: boolean
+  setFeedOpen: (v: boolean) => void
+  toggleFeed: () => void
+
+  /** Custom-content editor overlay state. */
+  editor: EditorState
+  /** Source/world to pre-fill when creating a new entry (from a Library tab). */
+  editorDefaultWorld: string
+  openTemplateSelect: (defaultWorld?: string) => void
+  openCreate: (type: ContentType, defaultWorld?: string) => void
+  openEdit: (entry: ContentEntry) => void
+  closeEditor: () => void
+
+  /** Document-import overlay. */
+  importOpen: boolean
+  /** Source/world to pre-fill in the import dialog. */
+  importDefaultWorld: string
+  openImport: (defaultWorld?: string) => void
+  closeImport: () => void
+
+  /** Collapsed sidebar (icons only). Persisted. */
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
+  setSidebarCollapsed: (v: boolean) => void
+  loadUi: () => Promise<void>
+}
+
+export const useUiStore = create<UiState>((set) => ({
+  drawerColumns: [],
+  maxPanelColumns: 2,
+  drawerToast: null,
+  openDrawer: (id) =>
+    set((s) => {
+      if (s.drawerColumns.some((c) => c.includes(id))) return s // already open
+      const cols = s.drawerColumns.map((c) => [...c])
+      if (cols.length < Math.max(1, s.maxPanelColumns)) {
+        cols.unshift([id]) // new column, newest on the left
+        return { drawerColumns: cols, drawerToast: null }
+      }
+      for (let j = cols.length - 1; j >= 0; j -= 1) {
+        if (cols[j].length < MAX_PANELS_PER_COLUMN) {
+          cols[j].push(id) // stack onto the right-most column with room
+          return { drawerColumns: cols, drawerToast: null }
+        }
+      }
+      return { drawerToast: PANEL_TOO_MANY_MESSAGE }
+    }),
+  closePanel: (id) =>
+    set((s) => ({
+      drawerColumns: s.drawerColumns.map((c) => c.filter((p) => p !== id)).filter((c) => c.length > 0)
+    })),
+  closeDrawer: () => set({ drawerColumns: [] }),
+  setDrawerColumns: (cols) => set({ drawerColumns: cols.filter((c) => c.length > 0) }),
+  setMaxPanelColumns: (n) =>
+    set((s) => {
+      if (n === s.maxPanelColumns) return s // no real change — keep manual layout
+      return { maxPanelColumns: n, drawerColumns: repack(s.drawerColumns, n) }
+    }),
+  dismissToast: () => set({ drawerToast: null }),
+
+  feedOpen: false,
+  setFeedOpen: (v) => set({ feedOpen: v }),
+  toggleFeed: () => set((s) => ({ feedOpen: !s.feedOpen })),
+
+  editor: { kind: 'closed' },
+  editorDefaultWorld: '',
+  openTemplateSelect: (defaultWorld = '') =>
+    set({ editor: { kind: 'select' }, editorDefaultWorld: defaultWorld }),
+  openCreate: (type, defaultWorld) =>
+    set((s) => ({
+      editor: { kind: 'form', type, entry: null },
+      editorDefaultWorld: defaultWorld ?? s.editorDefaultWorld
+    })),
+  openEdit: (entry) => set({ editor: { kind: 'form', type: entry.type, entry } }),
+  closeEditor: () => set({ editor: { kind: 'closed' }, editorDefaultWorld: '' }),
+
+  importOpen: false,
+  importDefaultWorld: '',
+  openImport: (defaultWorld = '') => set({ importOpen: true, importDefaultWorld: defaultWorld }),
+  closeImport: () => set({ importOpen: false, importDefaultWorld: '' }),
+
+  sidebarCollapsed: false,
+  toggleSidebar: () =>
+    set((s) => {
+      const v = !s.sidebarCollapsed
+      void setSetting('sidebarCollapsed', v)
+      return { sidebarCollapsed: v }
+    }),
+  setSidebarCollapsed: (v) => {
+    void setSetting('sidebarCollapsed', v)
+    set({ sidebarCollapsed: v })
+  },
+  loadUi: async () => {
+    const v = await getSetting<boolean>('sidebarCollapsed')
+    if (v != null) set({ sidebarCollapsed: v })
+  }
+}))

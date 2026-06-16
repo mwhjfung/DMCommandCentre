@@ -1,0 +1,206 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- colour themes (channels are space-separated RGB for Tailwind alpha) ---- */
+:root,
+[data-theme='cyberpunk-dark'] {
+  color-scheme: dark;
+  --bg: 8 7 15;
+  --surface: 15 15 24;
+  --surface-2: 22 22 31;
+  --surface-3: 31 31 43;
+  --border: 40 40 59;
+  --border-strong: 59 59 86;
+  --ink: 231 231 241;
+  --ink-muted: 150 150 176;
+  --ink-faint: 97 97 124;
+  --accent: 31 224 255;
+  --accent-strong: 16 185 214;
+  --accent-fg: 0 0 0;
+  --danger: 255 45 111;
+  --danger-strong: 216 32 90;
+  --success: 34 226 154;
+  --info: 164 114 255;
+}
+[data-theme='cyberpunk-light'] {
+  color-scheme: light;
+  --bg: 236 240 246;
+  --surface: 255 255 255;
+  --surface-2: 238 242 248;
+  --surface-3: 226 232 242;
+  --border: 205 213 227;
+  --border-strong: 178 188 206;
+  --ink: 14 16 28;
+  --ink-muted: 78 88 108;
+  --ink-faint: 128 138 158;
+  --accent: 8 178 212;
+  --accent-strong: 6 148 178;
+  --accent-fg: 0 0 0;
+  --danger: 224 30 96;
+  --danger-strong: 190 24 80;
+  --success: 16 175 118;
+  --info: 124 80 230;
+}
+@layer base {
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-ink antialiased;
+    font-size: 15px;
+    margin: 0;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgba(31, 224, 255, 0.3);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #28283b transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #28283b;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3b3b56;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-border bg-surface;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium
+      transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-accent-fg hover:bg-accent-strong;
+  }
+
+  .btn-ghost {
+    @apply btn text-ink-muted hover:bg-surface-3 hover:text-ink;
+  }
+
+  .btn-outline {
+    @apply btn border border-border-strong text-ink hover:border-accent/60 hover:bg-surface-3;
+  }
+
+  .btn-danger {
+    @apply btn bg-danger/15 text-danger hover:bg-danger/25;
+  }
+
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-muted
+      transition-colors hover:bg-surface-3 hover:text-ink;
+  }
+
+  .input {
+    @apply w-full rounded-md border border-border bg-surface-2 px-3 py-1.5 text-sm text-ink
+      placeholder:text-ink-muted focus:border-accent focus:outline-none;
+  }
+
+  /* Native selects indent their text differently; reset so it aligns with text
+     inputs, and supply our own chevron. */
+  select.input {
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239a9aa3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-ink-muted;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-border bg-surface-2 px-2 py-0.5
+      text-xs text-ink-muted;
+  }
+
+  .markdown {
+    @apply text-[15px] leading-relaxed text-ink-muted;
+  }
+  .markdown > :first-child {
+    margin-top: 0;
+  }
+  .markdown p {
+    @apply my-2;
+  }
+  .markdown strong {
+    @apply font-semibold text-ink;
+  }
+  .markdown em {
+    @apply italic;
+  }
+  .markdown ul {
+    @apply my-2 list-disc space-y-1 pl-5;
+  }
+  .markdown ol {
+    @apply my-2 list-decimal space-y-1 pl-5;
+  }
+  .markdown h1,
+  .markdown h2,
+  .markdown h3 {
+    @apply mb-1 mt-3 font-semibold text-ink;
+  }
+  .markdown a {
+    @apply text-accent underline;
+  }
+  .markdown code {
+    @apply rounded bg-surface-3 px-1 py-0.5 text-[13px] text-ink;
+  }
+  .markdown table {
+    @apply my-2 w-full border-collapse text-sm;
+  }
+  .markdown th,
+  .markdown td {
+    @apply border border-border px-2 py-1 text-left;
+  }
+  .markdown th {
+    @apply bg-surface-2 text-ink;
+  }
+}
+
+@keyframes drawerPanelIn {
+  from {
+    transform: translateX(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.drawer-panel-enter {
+  animation: drawerPanelIn 0.16s ease-out;
+}

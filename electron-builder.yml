@@ -1,0 +1,40 @@
+appId: com.fungy.dmcommand
+productName: DM Command
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!docs/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintignore,.prettierignore,.prettierrc,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tailwind.config.js,postcss.config.js,electron-builder.yml}'
+asar: true
+asarUnpack:
+  - resources/**
+win:
+  executableName: dm-command
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  icon: build/icon.icns
+  target:
+    - dmg
+  category: public.app-category.utilities
+  notarize: false
+  extendInfo:
+    NSMicrophoneUsageDescription: DM Command listens to your session so it can surface the relevant spell, monster, and item cards as you play.
+dmg:
+  artifactName: ${name}-${version}.${ext}
