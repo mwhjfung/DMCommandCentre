@@ -67,9 +67,47 @@ Builds are **unsigned** by default, so on first launch macOS Gatekeeper warns th
 
 ---
 
-## Distribution & updates
+## Installing the app (for your friend or a new machine)
 
-Not yet wired up. The intended path is [`electron-updater`](https://www.electron.build/auto-update) publishing to **GitHub Releases**: build with `electron-builder --publish always`, and the app checks for and installs updates on launch. Auto-update on macOS requires a signed + notarised build (an Apple Developer ID); on Windows it works unsigned, though SmartScreen warns until the installer is code-signed.
+Go to the [Releases page](https://github.com/mwhjfung/DMCommandCentre/releases/latest) and download the right file:
+
+| Platform | File to download |
+|---|---|
+| Windows | `dm-command-X.Y.Z-setup.exe` |
+| Mac (Apple Silicon) | `dm-command-X.Y.Z.dmg` |
+
+**Windows:** run the `.exe` installer, click through the prompts. SmartScreen may warn "unrecognised app" — click **More info → Run anyway**.
+
+**Mac:** open the `.dmg`, drag the app to Applications. On first launch, macOS will say the developer is unidentified — right-click the app and choose **Open**, then click **Open** again in the dialog. You only need to do this once.
+
+After the first install, updates are handled inside the app — see below.
+
+---
+
+## Publishing an update
+
+Do this whenever you want to push a new version to your friend.
+
+**1. Bump the version** in `package.json` — e.g. `"version": "0.1.0"` → `"0.2.0"`.
+
+**2. Set your GitHub token** (create one at github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens; give it **Contents: Read and write** on this repo):
+
+```bash
+export GH_TOKEN=your_token_here
+```
+
+**3. Build and publish:**
+
+```bash
+npm run publish:mac      # run this on your Mac
+npm run publish:win      # run this on a Windows machine
+```
+
+Each command builds the app and creates a GitHub Release with the installer attached. The next time either user opens the app and checks for updates (Settings → Updates), it will find and offer the new version.
+
+**Mac users:** when an update is found, clicking "Download" opens the GitHub releases page in the browser — download the new `.dmg` and reinstall. (Full silent auto-update on Mac requires a paid Apple Developer certificate.)
+
+**Windows users:** clicking "Download" in the app downloads and installs the update silently — just click "Restart & install" when it's ready.
 
 ---
 
@@ -89,7 +127,7 @@ src/renderer    The React app
 
 ## Status
 
-Single-user v1, in active development. The core (library, voice feed, dashboard, combat, campaigns, party) is built; auto-update and packaging polish are outstanding.
+In active development. The core (library, voice feed, dashboard, combat, campaigns, party) and auto-update via GitHub Releases are built.
 
 ## Licence
 

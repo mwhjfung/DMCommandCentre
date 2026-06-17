@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { UpdaterStatus } from '../main/updater'
 
 const dmc = {
   secrets: {
@@ -9,6 +10,17 @@ const dmc = {
   },
   ddb: {
     character: (id: string): Promise<unknown> => ipcRenderer.invoke('ddb:character', id)
+  },
+  updater: {
+    check: (): Promise<void> => ipcRenderer.invoke('updater:check'),
+    download: (): Promise<void> => ipcRenderer.invoke('updater:download'),
+    install: (releaseUrl?: string): Promise<void> =>
+      ipcRenderer.invoke('updater:install', releaseUrl),
+    onStatus: (cb: (s: UpdaterStatus) => void): (() => void) => {
+      const fn = (_e: Electron.IpcRendererEvent, s: UpdaterStatus): void => cb(s)
+      ipcRenderer.on('updater:status', fn)
+      return () => ipcRenderer.removeListener('updater:status', fn)
+    }
   },
   platform: process.platform
 }

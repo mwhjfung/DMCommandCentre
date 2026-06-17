@@ -2,6 +2,10 @@ appId: com.fungy.dmcommand
 productName: DM Command
 directories:
   buildResources: build
+publish:
+  provider: github
+  owner: mwhjfung
+  repo: DMCommandCentre
 files:
   - '!**/.vscode/*'
   - '!src/*'

@@ -1,8 +1,9 @@
 import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { secretsStore } from './secrets'
+import { setupUpdater } from './updater'
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -35,6 +36,8 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  return mainWindow
 }
 
 function registerIpc(): void {
@@ -69,7 +72,8 @@ app.whenReady().then(() => {
   })
 
   registerIpc()
-  createWindow()
+  const mainWindow = createWindow()
+  setupUpdater(mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

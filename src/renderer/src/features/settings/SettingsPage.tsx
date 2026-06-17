@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Download, Upload, ExternalLink, KeyRound, Eraser, Eye, EyeOff } from 'lucide-react'
+import { Download, Upload, ExternalLink, KeyRound, Eraser, Eye, EyeOff, RefreshCw } from 'lucide-react'
+
+type UpdaterPhase = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'error'
+type UpdaterStatus = { phase: UpdaterPhase; version?: string; percent?: number; message?: string; releaseUrl?: string }
 import { Page } from '@/components/Page'
 import { TagSelect } from '@/components/TagSelect'
 import { TYPE_META } from '@/components/typeMeta'
@@ -450,10 +453,84 @@ function DataSection(): JSX.Element {
   )
 }
 
+function UpdateSection(): JSX.Element {
+  const [status, setStatus] = useState<UpdaterStatus>({ phase: 'idle' })
+
+  useEffect(() => {
+    return window.dmc.updater.onStatus(setStatus)
+  }, [])
+
+  const isMac = window.dmc.platform === 'darwin'
+
+  const statusText: Record<UpdaterPhase, string> = {
+    idle: 'You are on the latest version.',
+    checking: 'Checking for updates…',
+    available: `v${status.version} is available.`,
+    downloading: `Downloading… ${status.percent ?? 0}%`,
+    ready: `v${status.version} downloaded — restart to apply.`,
+    error: `Update check failed: ${status.message ?? 'unknown error'}`
+  }
+
+  return (
+    <Section title="Updates" description={`Current version: v${__APP_VERSION__}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="btn-outline"
+          disabled={status.phase === 'checking' || status.phase === 'downloading'}
+          onClick={() => void window.dmc.updater.check()}
+        >
+          <RefreshCw size={15} />
+          Check for updates
+        </button>
+
+        {status.phase === 'available' && !isMac && (
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() => void window.dmc.updater.download()}
+          >
+            <Download size={15} />
+            Download v{status.version}
+          </button>
+        )}
+
+        {status.phase === 'available' && isMac && status.releaseUrl && (
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() => void window.dmc.updater.install(status.releaseUrl)}
+          >
+            <ExternalLink size={15} />
+            Download v{status.version}
+          </button>
+        )}
+
+        {status.phase === 'ready' && (
+          <button
+            type="button"
+            className="btn-accent"
+            onClick={() => void window.dmc.updater.install()}
+          >
+            Restart &amp; install
+          </button>
+        )}
+      </div>
+      <p className={cn('text-xs', status.phase === 'error' ? 'text-red-400' : 'text-ink-muted')}>
+        {statusText[status.phase]}
+        {status.phase === 'available' && isMac && (
+          <span className="ml-1">(Downloads the installer — re-open to complete.)</span>
+        )}
+      </p>
+    </Section>
+  )
+}
+
 export function SettingsPage(): JSX.Element {
   return (
     <Page title="Settings" subtitle="Voice, keyword feed, AI and data">
       <div className="mx-auto max-w-2xl space-y-4 p-6">
+        <UpdateSection />
         <AppearanceSection />
         <MicSection />
         <KeywordFeedSection />

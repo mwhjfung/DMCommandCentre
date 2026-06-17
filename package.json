@@ -15,7 +15,9 @@
     "build:srd": "node scripts/build-srd.mjs",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:win": "electron-vite build && electron-builder --win",
-    "build:unpack": "electron-vite build && electron-builder --dir"
+    "build:unpack": "electron-vite build && electron-builder --dir",
+    "publish:mac": "electron-vite build && electron-builder --mac --publish always",
+    "publish:win": "electron-vite build && electron-builder --win --publish always"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
@@ -25,6 +27,7 @@
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9",
     "lucide-react": "^0.453.0",
     "mammoth": "^1.12.0",
     "pdfjs-dist": "^4.10.38",
