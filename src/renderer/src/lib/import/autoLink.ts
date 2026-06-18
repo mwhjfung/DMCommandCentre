@@ -1,5 +1,5 @@
-import type { ContentEntry, ItemData, FeatData, BackgroundData } from '@/types/content'
-import type { PcUnit, PcItem, PcFeature } from '@/lib/store/pcStore'
+import type { ContentEntry, ItemData, FeatData, BackgroundData, SpellData } from '@/types/content'
+import type { PcUnit, PcItem, PcFeature, PcSpell } from '@/lib/store/pcStore'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -167,6 +167,44 @@ export function autoLinkAndSeed(
   }
 
   // ---------------------------------------------------------------------------
+  // 4. Spells
+  // ---------------------------------------------------------------------------
+
+  const updatedSpells: PcSpell[] = (pc.spells ?? []).map((spell) => {
+    if (!spell.name) return spell
+    const contentId = resolveId(['spell'], 'spell', spell.name, (id) => {
+      const levelText = spell.level === 0 ? 'Cantrip' : `${spell.level}-level`
+      const data: SpellData = {
+        level: spell.level,
+        levelText,
+        school: '',
+        castingTime: '',
+        range: '',
+        components: '',
+        duration: '',
+        concentration: false,
+        ritual: false,
+        description: '',
+        classes: []
+      }
+      const entry: ContentEntry = {
+        id,
+        type: 'spell',
+        source: 'custom',
+        name: spell.name,
+        summary: levelText,
+        tags: [],
+        world: sourceName,
+        createdAt: now,
+        updatedAt: now,
+        data
+      }
+      return entry
+    })
+    return { ...spell, contentId }
+  })
+
+  // ---------------------------------------------------------------------------
   // Return
   // ---------------------------------------------------------------------------
 
@@ -175,6 +213,7 @@ export function autoLinkAndSeed(
       ...pc,
       backgroundContentId,
       inventory: updatedInventory,
+      spells: updatedSpells,
       features: updatedFeatures
     },
     newEntries

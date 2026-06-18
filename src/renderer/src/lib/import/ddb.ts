@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { coercePc, type PcUnit, type FeatureCategory } from '@/lib/store/pcStore'
+import { coercePc, type PcUnit, type FeatureCategory, type PcSpell } from '@/lib/store/pcStore'
 import { abilityMod, SKILLS, type AbilityKey } from '@/lib/dnd/character'
 
 const uuid = (): string =>
@@ -173,6 +173,32 @@ function mapDdb(data: any): Partial<PcUnit> {
   for (const f of data?.feats ?? [])
     pushFeat(f?.definition?.name, f?.definition?.description ?? f?.definition?.snippet, 'feat')
 
+  // Spells — from classSpells (primary) + per-category spells object.
+  const spellSeen = new Set<string>()
+  const spells: PcSpell[] = []
+  const addSpell = (name: string, level: number, prepared: boolean): void => {
+    const key = (name ?? '').toLowerCase().trim()
+    if (!key || spellSeen.has(key)) return
+    spellSeen.add(key)
+    spells.push({ id: uuid(), name: name.trim(), level, prepared })
+  }
+  for (const cs of data?.classSpells ?? []) {
+    for (const sp of cs?.spells ?? []) {
+      const def = sp?.definition
+      if (!def?.name) continue
+      addSpell(def.name, num(def.level, 0), Boolean(sp.prepared || sp.alwaysPrepared || sp.countsAsKnownSpell))
+    }
+  }
+  for (const cat of ['race', 'class', 'feat', 'background', 'item', 'known']) {
+    const list = (data?.spells as any)?.[cat]
+    if (!Array.isArray(list)) continue
+    for (const sp of list) {
+      const def = sp?.definition
+      if (!def?.name) continue
+      addSpell(def.name, num(def.level, 0), Boolean(sp.prepared || sp.alwaysPrepared))
+    }
+  }
+
   return {
     name: data?.name ?? '',
     race,
@@ -185,6 +211,7 @@ function mapDdb(data: any): Partial<PcUnit> {
     abilities,
     saveProf,
     skillProf,
+    spells,
     languages: [
       ...new Set(
         mods

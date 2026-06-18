@@ -31,6 +31,7 @@ export function ImportCharactersDialog({
       if (newEntries.length) await bulkImport(newEntries)
       addPc(pc)
       const linked = pc.inventory.filter((i) => i.contentId).length
+        + pc.spells.filter((s) => s.contentId).length
         + pc.features.filter((f) => f.contentId).length
         + (pc.backgroundContentId ? 1 : 0)
       const created = newEntries.length
@@ -76,6 +77,7 @@ export function ImportCharactersDialog({
         }
         totalLinked +=
           pc.inventory.filter((i) => i.contentId).length +
+          pc.spells.filter((s) => s.contentId).length +
           pc.features.filter((f) => f.contentId).length +
           (pc.backgroundContentId ? 1 : 0)
         addPc(pc)

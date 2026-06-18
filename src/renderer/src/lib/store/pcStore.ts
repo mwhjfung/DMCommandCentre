@@ -12,6 +12,16 @@ export interface SpellSlotLevel {
 
 export type ActionType = 'action' | 'bonus' | 'reaction' | 'other'
 
+/** A spell known or prepared by this character (optionally linked to a library entry). */
+export interface PcSpell {
+  id: string
+  name: string
+  /** Spell level; 0 = cantrip. */
+  level: number
+  prepared: boolean
+  contentId?: string
+}
+
 /** An action, bonus action, reaction or other — with an optional use counter. */
 export interface PcAction {
   id: string
@@ -110,6 +120,7 @@ export interface PcUnit {
   // structured tabs
   actions: PcAction[]
   inventory: PcItem[]
+  spells: PcSpell[]
   features: PcFeature[]
   background: PcBackground
   noteSections: PcSection[]
@@ -201,6 +212,7 @@ export function coercePc(raw: RawPc): Omit<PcUnit, 'id'> {
     conditions: arr(raw.conditions),
     actions: Array.isArray(raw.actions) ? raw.actions : [],
     inventory: Array.isArray(raw.inventory) ? raw.inventory : [],
+    spells: Array.isArray(raw.spells) ? raw.spells : [],
     features: Array.isArray(raw.features) ? raw.features : [],
     background: { ...emptyBackground(), ...(raw.background ?? {}) },
     noteSections: migrateNotes(raw)
