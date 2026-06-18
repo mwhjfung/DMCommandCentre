@@ -9,7 +9,8 @@ import {
   Upload,
   FolderPlus,
   Pencil,
-  ChevronDown
+  ChevronDown,
+  GripVertical
 } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
@@ -324,7 +325,7 @@ export function LibraryPage(): JSX.Element {
                 onDragEnd={handleDragEnd}
                 onClick={() => resetTabView(id)}
                 className={cn(
-                  'whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                  'group flex items-center gap-1 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                   tab === id
                     ? 'border-accent text-ink'
                     : 'border-transparent text-ink-muted hover:text-ink',
@@ -332,6 +333,12 @@ export function LibraryPage(): JSX.Element {
                   dragOver === index && dragSrc !== null && dragSrc !== index && 'bg-accent/10'
                 )}
               >
+                {id !== ALL_TAB && (
+                  <GripVertical
+                    size={13}
+                    className="shrink-0 text-ink-muted/40 transition-colors group-hover:text-ink-muted"
+                  />
+                )}
                 {label}
                 <span className="ml-1.5 text-ink-muted">({countFor(id)})</span>
               </button>
