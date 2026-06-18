@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { X, Download, ExternalLink } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { DetailDrawer } from '@/components/DetailDrawer'
 import { Toast } from '@/components/Toast'
@@ -15,6 +16,54 @@ import { useCampaignStore } from '@/lib/store/campaignStore'
 import { useSessionStore } from '@/lib/store/sessionStore'
 import { useNotesStore } from '@/lib/store/notesStore'
 import { useUiStore } from '@/lib/store/uiStore'
+type UpdaterStatus = { phase: string; version?: string; percent?: number; message?: string; releaseUrl?: string }
+
+function UpdateBanner(): JSX.Element | null {
+  const [status, setStatus] = useState<UpdaterStatus>({ phase: 'idle' })
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    return window.dmc.updater.onStatus(setStatus)
+  }, [])
+
+  if (dismissed || status.phase !== 'available') return null
+
+  const isMac = window.dmc.platform === 'darwin'
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 bg-accent px-4 py-1.5 text-sm text-white">
+      <span className="flex-1">
+        v{status.version} is available
+      </span>
+      {isMac && status.releaseUrl ? (
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded px-2 py-0.5 font-medium hover:bg-white/20"
+          onClick={() => void window.dmc.updater.install(status.releaseUrl)}
+        >
+          <ExternalLink size={13} />
+          Download
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="flex items-center gap-1 rounded px-2 py-0.5 font-medium hover:bg-white/20"
+          onClick={() => void window.dmc.updater.download()}
+        >
+          <Download size={13} />
+          Download
+        </button>
+      )}
+      <button
+        type="button"
+        className="rounded p-0.5 hover:bg-white/20"
+        onClick={() => setDismissed(true)}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
 
 export function AppLayout(): JSX.Element {
   const loadCampaigns = useCampaignStore((s) => s.load)
@@ -56,12 +105,15 @@ export function AppLayout(): JSX.Element {
   }, [])
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg text-ink">
-      <Sidebar />
-      <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
-        <Outlet />
-        <DetailDrawer />
-      </main>
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-bg text-ink">
+      <UpdateBanner />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Sidebar />
+        <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+          <Outlet />
+          <DetailDrawer />
+        </main>
+      </div>
       <VoiceDock />
       <EntryEditor />
       {importOpen && <ImportDialog />}
