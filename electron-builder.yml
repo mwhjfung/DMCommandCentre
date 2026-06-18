@@ -6,6 +6,7 @@ publish:
   provider: github
   owner: mwhjfung
   repo: DMCommandCentre
+  releaseType: release
 files:
   - '!**/.vscode/*'
   - '!src/*'
