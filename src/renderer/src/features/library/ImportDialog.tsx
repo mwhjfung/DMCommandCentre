@@ -8,9 +8,11 @@ import { useUiStore } from '@/lib/store/uiStore'
 import { useSettingsStore } from '@/lib/store/settingsStore'
 import type { ContentEntry } from '@/types/content'
 import { ImportReview } from './ImportReview'
+import { JsonBatchReview } from './JsonBatchReview'
+import { parseJson } from '@/lib/import/parseJson'
 import { cn } from '@/lib/cn'
 
-type Phase = 'pick' | 'parsing' | 'review' | 'error'
+type Phase = 'pick' | 'parsing' | 'review' | 'json-review' | 'error'
 
 const STRATEGIES: Array<{ value: SplitStrategy; label: string; desc: string }> = [
   {
@@ -32,6 +34,7 @@ export function ImportDialog(): JSX.Element {
   const [type, setType] = useState<ImportType>('mixed')
   const [strategy, setStrategy] = useState<SplitStrategy>('headings')
   const [useClaude, setUseClaude] = useState(false)
+  const [isJson, setIsJson] = useState(false)
   const [source, setSource] = useState(importDefaultWorld)
   const [drafts, setDrafts] = useState<ContentEntry[]>([])
   const [error, setError] = useState('')
@@ -49,6 +52,12 @@ export function ImportDialog(): JSX.Element {
     setPhase('parsing')
     setError('')
     try {
+      if (isJson) {
+        const result = await parseJson(file, source.trim())
+        setDrafts(result)
+        setPhase('json-review')
+        return
+      }
       const doc = await extractText(file)
       let result = useClaude ? await smartParse(doc.text) : splitEntries(doc, strategy, type, file.name)
       const src = source.trim()
@@ -67,7 +76,7 @@ export function ImportDialog(): JSX.Element {
       setDrafts(result)
       setPhase('review')
     } catch (err) {
-      setError(useClaude ? String(err) : `Couldn't read that file: ${String(err)}`)
+      setError(isJson ? String(err) : `Couldn't read that file: ${String(err)}`)
       setPhase('error')
     }
   }
@@ -80,6 +89,8 @@ export function ImportDialog(): JSX.Element {
       <div className="mt-[4vh]" onClick={(e) => e.stopPropagation()}>
         {phase === 'review' ? (
           <ImportReview drafts={drafts} onClose={closeImport} />
+        ) : phase === 'json-review' ? (
+          <JsonBatchReview drafts={drafts} sourceName={source} onClose={closeImport} />
         ) : (
           <div className="panel w-[520px]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -99,98 +110,110 @@ export function ImportDialog(): JSX.Element {
                 <label className="label">File</label>
                 <input
                   type="file"
-                  accept=".docx,.pdf,.txt,.md,.markdown"
+                  accept=".docx,.pdf,.txt,.md,.markdown,.json"
                   onChange={(e) => {
-                    setFile(e.target.files?.[0] ?? null)
+                    const f = e.target.files?.[0] ?? null
+                    setFile(f)
+                    setIsJson(f?.name.toLowerCase().endsWith('.json') ?? false)
                     setPhase('pick')
                   }}
                   className="block w-full text-sm text-ink-muted file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-sm file:text-ink hover:file:bg-border-strong"
                 />
               </div>
 
-              <label
-                className={cn(
-                  'flex items-start gap-2 rounded-md border p-2.5',
-                  useClaude ? 'border-accent/60 bg-accent/10' : 'border-border',
-                  !hasKey && 'opacity-60'
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={useClaude}
-                  disabled={!hasKey}
-                  onChange={(e) => setUseClaude(e.target.checked)}
-                />
-                <div>
-                  <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
-                    <Sparkles size={14} className="text-accent" />
-                    Smart parse with Claude
-                  </div>
-                  <div className="text-xs text-ink-muted">
-                    {hasKey
-                      ? 'Claude reads the whole document and extracts correctly-typed entries — best for messy PDFs. Costs a few cents.'
-                      : 'Add an Anthropic key in Settings → AI to enable this.'}
-                  </div>
-                </div>
-              </label>
-
-              {!useClaude && (
+              {!isJson && (
                 <>
-                  <div>
-                    <label className="label">These entries are…</label>
-                    <select
-                      className="input"
-                      value={type}
-                      onChange={(e) => setType(e.target.value as ImportType)}
-                    >
-                      <option value="mixed">Mixed — best guess per entry</option>
-                      {CREATABLE_TYPES.map((t) => (
-                        <option key={t} value={t}>
-                          All {TEMPLATES[t].label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <label
+                    className={cn(
+                      'flex items-start gap-2 rounded-md border p-2.5',
+                      useClaude ? 'border-accent/60 bg-accent/10' : 'border-border',
+                      !hasKey && 'opacity-60'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={useClaude}
+                      disabled={!hasKey}
+                      onChange={(e) => setUseClaude(e.target.checked)}
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-ink">
+                        <Sparkles size={14} className="text-accent" />
+                        Smart parse with Claude
+                      </div>
+                      <div className="text-xs text-ink-muted">
+                        {hasKey
+                          ? 'Claude reads the whole document and extracts correctly-typed entries — best for messy PDFs. Costs a few cents.'
+                          : 'Add an Anthropic key in Settings → AI to enable this.'}
+                      </div>
+                    </div>
+                  </label>
 
-                  <div>
-                    <label className="label">Split into entries by</label>
-                    <div className="space-y-1.5">
-                      {STRATEGIES.map((opt) => (
-                        <label
-                          key={opt.value}
-                          className={cn(
-                            'flex cursor-pointer gap-2 rounded-md border p-2 text-sm',
-                            strategy === opt.value
-                              ? 'border-accent/60 bg-accent/10'
-                              : 'border-border hover:border-border-strong'
-                          )}
+                  {!useClaude && (
+                    <>
+                      <div>
+                        <label className="label">These entries are…</label>
+                        <select
+                          className="input"
+                          value={type}
+                          onChange={(e) => setType(e.target.value as ImportType)}
                         >
-                          <input
-                            type="radio"
-                            name="strategy"
-                            checked={strategy === opt.value}
-                            onChange={() => setStrategy(opt.value)}
-                            className="mt-0.5"
-                          />
-                          <div>
-                            <div className="font-medium text-ink">{opt.label}</div>
-                            <div className="text-xs text-ink-muted">{opt.desc}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+                          <option value="mixed">Mixed — best guess per entry</option>
+                          {CREATABLE_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              All {TEMPLATES[t].label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  {strategy === 'table' && (
-                    <div className="flex items-start gap-2 rounded-md border border-info/40 bg-info/10 p-2.5 text-xs text-info">
-                      <Info size={14} className="mt-0.5 shrink-0" />
-                      Table mode reads Word (.docx) and markdown tables only — a PDF is just
-                      positioned text with no real table structure, so use Headings or Paragraphs for
-                      those.
-                    </div>
+                      <div>
+                        <label className="label">Split into entries by</label>
+                        <div className="space-y-1.5">
+                          {STRATEGIES.map((opt) => (
+                            <label
+                              key={opt.value}
+                              className={cn(
+                                'flex cursor-pointer gap-2 rounded-md border p-2 text-sm',
+                                strategy === opt.value
+                                  ? 'border-accent/60 bg-accent/10'
+                                  : 'border-border hover:border-border-strong'
+                              )}
+                            >
+                              <input
+                                type="radio"
+                                name="strategy"
+                                checked={strategy === opt.value}
+                                onChange={() => setStrategy(opt.value)}
+                                className="mt-0.5"
+                              />
+                              <div>
+                                <div className="font-medium text-ink">{opt.label}</div>
+                                <div className="text-xs text-ink-muted">{opt.desc}</div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {strategy === 'table' && (
+                        <div className="flex items-start gap-2 rounded-md border border-info/40 bg-info/10 p-2.5 text-xs text-info">
+                          <Info size={14} className="mt-0.5 shrink-0" />
+                          Table mode reads Word (.docx) and markdown tables only — a PDF is just
+                          positioned text with no real table structure, so use Headings or Paragraphs for
+                          those.
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
+              )}
+
+              {isJson && (
+                <p className="rounded-md border border-border bg-surface-2 p-2.5 text-xs text-ink-muted">
+                  JSON files are parsed directly — no splitting needed.
+                </p>
               )}
 
               <div>
