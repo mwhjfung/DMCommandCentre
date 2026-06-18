@@ -154,7 +154,7 @@ function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
       <div className="space-y-2">
         {shown.length === 0 && <p className="text-sm text-ink-muted">Nothing here yet.</p>}
         {shown.map((a) => (
-          <div key={a.id} className="space-y-2 rounded-md border border-border bg-surface p-2">
+          <div key={a.id} className="rounded-md border border-border bg-surface p-2">
             <div className="flex items-center gap-2">
               {a.contentId ? (
                 <button
@@ -168,18 +168,15 @@ function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
               ) : (
                 <input className="input flex-1" placeholder="Action name" value={a.name} onChange={(e) => patch(a.id, { name: e.target.value })} />
               )}
-              <select className="input w-28 shrink-0" value={a.type} onChange={(e) => patch(a.id, { type: e.target.value as ActionType })}>
-                <option value="action">Action</option>
-                <option value="bonus">Bonus</option>
-                <option value="reaction">Reaction</option>
-                <option value="other">Other</option>
-              </select>
+              <span className="chip shrink-0 capitalize">{a.type}</span>
               <button type="button" className="icon-btn shrink-0 hover:text-danger" onClick={() => remove(a.id)}>
                 <Trash2 size={14} />
               </button>
             </div>
-            <textarea className="input min-h-[40px] resize-none" placeholder="What it does…" value={a.description} onChange={(e) => patch(a.id, { description: e.target.value })} />
-            <div className="flex items-center gap-2 text-xs text-ink-muted">
+            {a.description && (
+              <p className="mt-1 text-xs leading-snug text-ink-muted">{a.description}</p>
+            )}
+            <div className="mt-1.5 flex items-center gap-2 text-xs text-ink-muted">
               <span>Uses</span>
               <input
                 type="number" min={0}
@@ -224,7 +221,17 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
   const applyHp = (sign: number): void => {
     const n = Number(hpAmt)
     if (!n) return
-    updatePc(pc.id, { currentHp: Math.max(0, Math.min(pc.maxHp, pc.currentHp - sign * n)) })
+    if (sign === 1) {
+      // Damage: drain temp HP before actual HP
+      const tempDrained = Math.min(pc.tempHp, n)
+      updatePc(pc.id, {
+        tempHp: pc.tempHp - tempDrained,
+        currentHp: Math.max(0, pc.currentHp - (n - tempDrained))
+      })
+    } else {
+      // Heal: only restores actual HP, never temp
+      updatePc(pc.id, { currentHp: Math.min(pc.maxHp, pc.currentHp + n) })
+    }
     setHpAmt('')
   }
   const items = useContentStore((s) => s.items)
@@ -416,30 +423,27 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
         {/* HP */}
         <Panel>
           <SectionLabel>Hit points</SectionLabel>
-          {/* Bar: normal HP + temp HP extension (blue) */}
-          {(() => {
-            const total = pc.maxHp + pc.tempHp
-            const hpPct = total > 0 ? Math.min(100, (pc.currentHp / total) * 100) : 0
-            const tempPct = total > 0 ? (pc.tempHp / total) * 100 : 0
-            return (
-              <div className="mb-2 h-2.5 overflow-hidden rounded-full bg-surface-3">
-                <div className="flex h-full">
-                  <div
-                    className={cn('h-full shrink-0 transition-all', hpColor(pc.currentHp, pc.maxHp))}
-                    style={{ width: `${hpPct}%` }}
-                  />
-                  {pc.tempHp > 0 && (
-                    <div
-                      className="h-full shrink-0 bg-blue-400/80 transition-all"
-                      style={{ width: `${tempPct}%` }}
-                    />
-                  )}
-                </div>
+          {/* Actual HP bar */}
+          <div className="mb-1 h-2.5 overflow-hidden rounded-full bg-surface-3">
+            <div
+              className={cn('h-full transition-all', hpColor(pc.currentHp, pc.maxHp))}
+              style={{ width: `${pc.maxHp > 0 ? Math.min(100, (pc.currentHp / pc.maxHp) * 100) : 0}%` }}
+            />
+          </div>
+          {/* Temp HP bar — separate buffer, drains before actual HP */}
+          {pc.tempHp > 0 && (
+            <div className="mb-1.5 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+                <div
+                  className="h-full bg-blue-400/70 transition-all"
+                  style={{ width: `${pc.maxHp > 0 ? Math.min(100, (pc.tempHp / pc.maxHp) * 100) : 100}%` }}
+                />
               </div>
-            )
-          })()}
+              <span className="shrink-0 text-[10px] font-medium text-blue-400">+{pc.tempHp} temp</span>
+            </div>
+          )}
           {/* Controls row */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className={cn('flex flex-wrap items-center gap-1.5', pc.tempHp === 0 && 'mt-2')}>
             {/* Current HP */}
             <input
               type="number"
@@ -467,7 +471,7 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
             <button
               type="button"
               className="rounded bg-danger/15 px-1.5 py-0.5 text-xs text-danger hover:bg-danger/25"
-              title="Damage"
+              title="Damage (drains temp first)"
               onClick={() => applyHp(1)}
             >
               −
