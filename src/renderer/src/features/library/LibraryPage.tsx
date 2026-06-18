@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect, useLayoutEffect } from 'react'
 import {
   Search,
   Download,
@@ -8,7 +8,8 @@ import {
   Plus,
   Upload,
   FolderPlus,
-  Pencil
+  Pencil,
+  ChevronDown
 } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
@@ -16,13 +17,14 @@ import { ContentGrid } from '@/components/ContentGrid'
 import { useContentStore, sourceInCampaign, SRD_SOURCE_ID, type Source } from '@/lib/store/contentStore'
 import { useCampaignStore } from '@/lib/store/campaignStore'
 import { useUiStore } from '@/lib/store/uiStore'
-import { filterContent } from '@/lib/db/content'
+import { filterContent, getSetting, setSetting } from '@/lib/db/content'
 import { CONTENT_TYPE_LABELS, type ContentType } from '@/types/content'
 import { cn } from '@/lib/cn'
 import { SourceDialog } from './SourceDialog'
 import { BulkActionBar } from './BulkActionBar'
 
 const ALL_TAB = 'all'
+const TAB_ORDER_KEY = 'source-tab-order'
 type DialogState = { mode: 'add' } | { mode: 'edit'; source: Source } | null
 
 export function LibraryPage(): JSX.Element {
@@ -40,9 +42,20 @@ export function LibraryPage(): JSX.Element {
   const [activeTypes, setActiveTypes] = useState<Set<ContentType>>(new Set())
   const [dialog, setDialog] = useState<DialogState>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const searchRef = useRef<HTMLInputElement>(null)
 
-  // Sources in the active campaign become Library tabs (All and SRD bookend them).
+  // Tab order, overflow, drag state
+  const [tabOrder, setTabOrder] = useState<string[]>([])
+  const [visibleCount, setVisibleCount] = useState(Infinity)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [dragSrc, setDragSrc] = useState<number | null>(null)
+  const [dragOver, setDragOver] = useState<number | null>(null)
+
+  const searchRef = useRef<HTMLInputElement>(null)
+  const tabsRowRef = useRef<HTMLDivElement>(null)
+  // Off-screen measurement row to size all tabs without clipping
+  const measureEls = useRef<Map<string, HTMLButtonElement>>(new Map())
+  const moreRef = useRef<HTMLDivElement>(null)
+
   const campaignSources = useMemo(
     () =>
       sources
@@ -50,16 +63,33 @@ export function LibraryPage(): JSX.Element {
         .sort((a, b) => a.createdAt - b.createdAt),
     [sources, activeId]
   )
-  const tabs = useMemo(
-    () => [
-      { id: ALL_TAB, label: 'All' },
+
+  // Non-All tabs in user-defined order (new tabs append to end)
+  const nonAllTabs = useMemo(() => {
+    const all = [
       { id: SRD_SOURCE_ID, label: 'SRD' },
       ...campaignSources.map((s) => ({ id: s.id, label: s.name }))
-    ],
-    [campaignSources]
+    ]
+    if (tabOrder.length) {
+      const idx = new Map(tabOrder.map((id, i) => [id, i]))
+      all.sort((a, b) => (idx.get(a.id) ?? 9999) - (idx.get(b.id) ?? 9999))
+    }
+    return all
+  }, [campaignSources, tabOrder])
+
+  const tabs = useMemo(
+    () => [{ id: ALL_TAB, label: 'All' }, ...nonAllTabs],
+    [nonAllTabs]
   )
 
-  // If the active tab disappears (campaign switch, source deleted), fall back to All.
+  // Load persisted tab order once on mount
+  useEffect(() => {
+    void getSetting<string[]>(TAB_ORDER_KEY).then((order) => {
+      if (order?.length) setTabOrder(order)
+    })
+  }, [])
+
+  // Fallback to All if active tab disappears (campaign switch, source deleted)
   useEffect(() => {
     if (!tabs.some((t) => t.id === tab)) setTab(ALL_TAB)
   }, [tabs, tab])
@@ -75,6 +105,87 @@ export function LibraryPage(): JSX.Element {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  // Close "More" dropdown on outside click
+  useEffect(() => {
+    if (!moreOpen) return
+    const handler = (e: MouseEvent): void => {
+      if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [moreOpen])
+
+  // Overflow detection: measure tab widths from off-screen row, track container width
+  useLayoutEffect(() => {
+    const row = tabsRowRef.current
+    if (!row) return
+
+    const MORE_W = 80 // "More ▾" button reserved width
+    const GAP = 4 // gap-1
+
+    const calculate = (): void => {
+      const containerWidth = row.clientWidth
+      const widths = tabs.map((t) => {
+        const el = measureEls.current.get(t.id)
+        return (el?.offsetWidth ?? 80) + GAP
+      })
+      const total = widths.reduce((s, w) => s + w, 0)
+      if (total <= containerWidth) {
+        setVisibleCount(tabs.length)
+        return
+      }
+      const budget = containerWidth - MORE_W
+      let used = 0
+      let count = 0
+      for (const w of widths) {
+        if (used + w > budget) break
+        used += w
+        count++
+      }
+      setVisibleCount(Math.max(1, count))
+    }
+
+    calculate()
+    const ro = new ResizeObserver(calculate)
+    ro.observe(row)
+    return () => ro.disconnect()
+  }, [tabs])
+
+  const vc = Math.min(visibleCount, tabs.length)
+  const visibleTabs = tabs.slice(0, vc)
+  const overflowTabs = tabs.slice(vc)
+  const activeInOverflow = overflowTabs.some((t) => t.id === tab)
+
+  // Drag-to-reorder — All (index 0) is pinned and never movable
+  const handleDragStart = (index: number): void => {
+    if (index === 0) return
+    setDragSrc(index)
+  }
+  const handleDragOver = (e: React.DragEvent, index: number): void => {
+    if (dragSrc === null || index === 0) return
+    e.preventDefault()
+    setDragOver(index)
+  }
+  const handleDrop = (e: React.DragEvent, toIndex: number): void => {
+    e.preventDefault()
+    if (dragSrc === null || toIndex === 0 || dragSrc === toIndex) {
+      setDragSrc(null)
+      setDragOver(null)
+      return
+    }
+    const next = nonAllTabs.map((t) => t.id)
+    const [moved] = next.splice(dragSrc - 1, 1)
+    next.splice(toIndex - 1, 0, moved)
+    setTabOrder(next)
+    void setSetting(TAB_ORDER_KEY, next)
+    setDragSrc(null)
+    setDragOver(null)
+  }
+  const handleDragEnd = (): void => {
+    setDragSrc(null)
+    setDragOver(null)
+  }
 
   const isAll = tab === ALL_TAB
   const isSrd = tab === SRD_SOURCE_ID
@@ -122,6 +233,7 @@ export function LibraryPage(): JSX.Element {
     setActiveTypes(new Set())
     setQuery('')
     clearSelection()
+    setMoreOpen(false)
   }
 
   const srdCount = useMemo(() => visibleItems.filter((i) => i.source === 'srd').length, [visibleItems])
@@ -174,19 +286,50 @@ export function LibraryPage(): JSX.Element {
   return (
     <Page title="Library" actions={actions}>
       <div className="flex h-full flex-col">
-        {/* tabs (= sources) */}
+        {/* tab bar */}
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-6 pt-3">
-          <div className="flex flex-1 items-center gap-1 overflow-x-auto">
+
+          {/* Off-screen measurement row — never visible, always in DOM for width queries */}
+          <div
+            aria-hidden
+            className="pointer-events-none fixed left-0 top-[-9999px] flex items-center gap-1"
+          >
             {tabs.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
+                tabIndex={-1}
+                ref={(el) => {
+                  if (el) measureEls.current.set(id, el)
+                  else measureEls.current.delete(id)
+                }}
+                className="whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium"
+              >
+                {label}
+                <span className="ml-1.5">({countFor(id)})</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Visible tabs (clipped at overflow boundary) */}
+          <div ref={tabsRowRef} className="flex flex-1 items-center gap-1 overflow-hidden">
+            {visibleTabs.map(({ id, label }, index) => (
+              <button
+                key={id}
+                type="button"
+                draggable={id !== ALL_TAB}
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
                 onClick={() => resetTabView(id)}
                 className={cn(
                   'whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                   tab === id
                     ? 'border-accent text-ink'
-                    : 'border-transparent text-ink-muted hover:text-ink'
+                    : 'border-transparent text-ink-muted hover:text-ink',
+                  dragSrc === index && 'opacity-40',
+                  dragOver === index && dragSrc !== null && dragSrc !== index && 'bg-accent/10'
                 )}
               >
                 {label}
@@ -194,6 +337,45 @@ export function LibraryPage(): JSX.Element {
               </button>
             ))}
           </div>
+
+          {/* Overflow "More ▾" dropdown */}
+          {overflowTabs.length > 0 && (
+            <div ref={moreRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setMoreOpen((o) => !o)}
+                className={cn(
+                  'mb-1 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-surface-3',
+                  activeInOverflow ? 'text-accent' : 'text-ink-muted hover:text-ink'
+                )}
+              >
+                More
+                <ChevronDown
+                  size={13}
+                  className={cn('transition-transform', moreOpen && 'rotate-180')}
+                />
+              </button>
+              {moreOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-border bg-surface-2 py-1 shadow-lg">
+                  {overflowTabs.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => resetTabView(id)}
+                      className={cn(
+                        'flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3',
+                        tab === id ? 'text-ink' : 'text-ink-muted'
+                      )}
+                    >
+                      <span>{label}</span>
+                      <span className="ml-4 text-xs text-ink-muted">({countFor(id)})</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => setDialog({ mode: 'add' })}
