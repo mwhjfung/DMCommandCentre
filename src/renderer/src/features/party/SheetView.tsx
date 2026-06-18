@@ -212,11 +212,48 @@ function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Temp HP pie — drains counter-clockwise as temp HP is lost
+// ---------------------------------------------------------------------------
+
+function TempHpPie({ value, max }: { value: number; max: number }): JSX.Element {
+  const size = 20
+  const cx = size / 2
+  const cy = size / 2
+  const r = size / 2 - 1
+  const pct = max > 0 ? Math.min(1, value / max) : 0
+
+  // Build a clockwise filled wedge starting from the top.
+  // As pct decreases the wedge shrinks counter-clockwise from its end.
+  let wedge: string | null = null
+  if (pct > 0 && pct < 1) {
+    const start = -Math.PI / 2
+    const end = start + pct * 2 * Math.PI
+    const x1 = cx + r * Math.cos(start)
+    const y1 = cy + r * Math.sin(start)
+    const x2 = cx + r * Math.cos(end)
+    const y2 = cy + r * Math.sin(end)
+    wedge = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${pct > 0.5 ? 1 : 0} 1 ${x2} ${y2} Z`
+  }
+
+  return (
+    <svg width={size} height={size} className="shrink-0" aria-hidden>
+      {/* Outline track — always visible */}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={1} className="text-blue-400/25" />
+      {/* Filled wedge */}
+      {pct >= 1 && <circle cx={cx} cy={cy} r={r} className="fill-blue-400/75" />}
+      {wedge && <path d={wedge} className="fill-blue-400/75" />}
+    </svg>
+  )
+}
+
 export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
   const updatePc = usePcStore((s) => s.updatePc)
   const longRestOne = usePcStore((s) => s.longRestOne)
   const shortRestOne = usePcStore((s) => s.shortRestOne)
   const [hpAmt, setHpAmt] = useState('')
+  // Track the "full" value when temp HP was set so the pie drains correctly
+  const [tempHpMax, setTempHpMax] = useState(pc.tempHp)
 
   const applyHp = (sign: number): void => {
     const n = Number(hpAmt)
@@ -423,27 +460,18 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
         {/* HP */}
         <Panel>
           <SectionLabel>Hit points</SectionLabel>
-          {/* Actual HP bar */}
-          <div className="mb-1 h-2.5 overflow-hidden rounded-full bg-surface-3">
-            <div
-              className={cn('h-full transition-all', hpColor(pc.currentHp, pc.maxHp))}
-              style={{ width: `${pc.maxHp > 0 ? Math.min(100, (pc.currentHp / pc.maxHp) * 100) : 0}%` }}
-            />
-          </div>
-          {/* Temp HP bar — separate buffer, drains before actual HP */}
-          {pc.tempHp > 0 && (
-            <div className="mb-1.5 flex items-center gap-2">
-              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
-                <div
-                  className="h-full bg-blue-400/70 transition-all"
-                  style={{ width: `${pc.maxHp > 0 ? Math.min(100, (pc.tempHp / pc.maxHp) * 100) : 100}%` }}
-                />
-              </div>
-              <span className="shrink-0 text-[10px] font-medium text-blue-400">+{pc.tempHp} temp</span>
+          {/* HP bar + temp HP pie inline */}
+          <div className="mb-2 flex items-center gap-2">
+            <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+              <div
+                className={cn('h-full transition-all', hpColor(pc.currentHp, pc.maxHp))}
+                style={{ width: `${pc.maxHp > 0 ? Math.min(100, (pc.currentHp / pc.maxHp) * 100) : 0}%` }}
+              />
             </div>
-          )}
+            <TempHpPie value={pc.tempHp} max={tempHpMax} />
+          </div>
           {/* Controls row */}
-          <div className={cn('flex flex-wrap items-center gap-1.5', pc.tempHp === 0 && 'mt-2')}>
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* Current HP */}
             <input
               type="number"
@@ -490,7 +518,11 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
               <input
                 type="number"
                 value={pc.tempHp}
-                onChange={(e) => updatePc(pc.id, { tempHp: Math.max(0, Number(e.target.value)) })}
+                onChange={(e) => {
+                  const val = Math.max(0, Number(e.target.value))
+                  updatePc(pc.id, { tempHp: val })
+                  setTempHpMax(val > 0 ? val : 0)
+                }}
                 className="w-12 rounded bg-surface-2 px-1 py-0.5 text-center text-sm text-ink focus:outline-none"
               />
             </div>
