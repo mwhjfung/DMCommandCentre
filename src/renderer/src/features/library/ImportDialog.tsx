@@ -30,12 +30,13 @@ export function ImportDialog(): JSX.Element {
   const importDefaultWorld = useUiStore((s) => s.importDefaultWorld)
   const hasKey = useSettingsStore((s) => s.hasKey)
   const [phase, setPhase] = useState<Phase>('pick')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [type, setType] = useState<ImportType>('mixed')
   const [strategy, setStrategy] = useState<SplitStrategy>('headings')
   const [useClaude, setUseClaude] = useState(false)
-  const [isJson, setIsJson] = useState(false)
   const [source, setSource] = useState(importDefaultWorld)
+
+  const isJson = files.length > 0 && files.every((f) => f.name.toLowerCase().endsWith('.json'))
   const [drafts, setDrafts] = useState<ContentEntry[]>([])
   const [error, setError] = useState('')
 
@@ -48,16 +49,25 @@ export function ImportDialog(): JSX.Element {
   }, [phase, closeImport])
 
   const parse = async (): Promise<void> => {
-    if (!file) return
+    if (!files.length) return
     setPhase('parsing')
     setError('')
     try {
       if (isJson) {
-        const result = await parseJson(file, source.trim())
-        setDrafts(result)
+        const src = source.trim()
+        const all: ContentEntry[] = []
+        for (const f of files) {
+          const result = await parseJson(f, src)
+          all.push(...result)
+        }
+        // Dedupe by id — last file wins on collision
+        const seen = new Map<string, ContentEntry>()
+        for (const e of all) seen.set(e.id, e)
+        setDrafts([...seen.values()])
         setPhase('json-review')
         return
       }
+      const file = files[0]
       const doc = await extractText(file)
       let result = useClaude ? await smartParse(doc.text) : splitEntries(doc, strategy, type, file.name)
       const src = source.trim()
@@ -94,7 +104,7 @@ export function ImportDialog(): JSX.Element {
         ) : (
           <div className="panel w-[520px]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-ink">Import documents</h2>
+              <h2 className="text-sm font-semibold text-ink">Import</h2>
               <button type="button" className="icon-btn" onClick={closeImport}>
                 <X size={16} />
               </button>
@@ -102,8 +112,10 @@ export function ImportDialog(): JSX.Element {
 
             <div className="space-y-4 p-4">
               <p className="text-sm text-ink-muted">
-                Bring in a Word, PDF, text or markdown file as rough drafts, then review each one
-                before saving. Nothing leaves your machine.
+                Bring in a <strong className="text-ink">JSON file</strong> from 5etools (or a
+                pre-converted export) for bulk import, or a{' '}
+                <strong className="text-ink">Word, PDF, text or markdown</strong> file to parse
+                into individual drafts. Nothing leaves your machine.
               </p>
 
               <div>
@@ -111,10 +123,9 @@ export function ImportDialog(): JSX.Element {
                 <input
                   type="file"
                   accept=".docx,.pdf,.txt,.md,.markdown,.json"
+                  multiple
                   onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null
-                    setFile(f)
-                    setIsJson(f?.name.toLowerCase().endsWith('.json') ?? false)
+                    setFiles(Array.from(e.target.files ?? []))
                     setPhase('pick')
                   }}
                   className="block w-full text-sm text-ink-muted file:mr-3 file:rounded-md file:border-0 file:bg-surface-3 file:px-3 file:py-1.5 file:text-sm file:text-ink hover:file:bg-border-strong"
@@ -241,7 +252,7 @@ export function ImportDialog(): JSX.Element {
               <button
                 type="button"
                 className="btn-accent"
-                disabled={!file || phase === 'parsing'}
+                disabled={files.length === 0 || phase === 'parsing'}
                 onClick={() => void parse()}
               >
                 {phase === 'parsing' ? (
