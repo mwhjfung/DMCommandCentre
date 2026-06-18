@@ -10,7 +10,8 @@ import {
   FolderPlus,
   Pencil,
   ChevronDown,
-  GripVertical
+  GripVertical,
+  FileDown
 } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
@@ -23,6 +24,7 @@ import { CONTENT_TYPE_LABELS, type ContentType } from '@/types/content'
 import { cn } from '@/lib/cn'
 import { SourceDialog } from './SourceDialog'
 import { BulkActionBar } from './BulkActionBar'
+import { ExportDialog } from './ExportDialog'
 
 const ALL_TAB = 'all'
 const TAB_ORDER_KEY = 'source-tab-order'
@@ -43,6 +45,8 @@ export function LibraryPage(): JSX.Element {
   const [activeTypes, setActiveTypes] = useState<Set<ContentType>>(new Set())
   const [dialog, setDialog] = useState<DialogState>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const [exportOpen, setExportOpen] = useState(false)
 
   // Tab order, overflow, drag state
   const [tabOrder, setTabOrder] = useState<string[]>([])
@@ -336,7 +340,7 @@ export function LibraryPage(): JSX.Element {
                 {id !== ALL_TAB && (
                   <GripVertical
                     size={13}
-                    className="shrink-0 text-ink-muted/40 transition-colors group-hover:text-ink-muted"
+                    className="mx-1.5 shrink-0 text-ink-muted/40 transition-colors group-hover:text-ink-muted"
                   />
                 )}
                 {label}
@@ -383,6 +387,14 @@ export function LibraryPage(): JSX.Element {
             </div>
           )}
 
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            className="mb-1 inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink"
+          >
+            <FileDown size={14} />
+            Export
+          </button>
           <button
             type="button"
             onClick={() => setDialog({ mode: 'add' })}
@@ -492,6 +504,8 @@ export function LibraryPage(): JSX.Element {
           onDeleted={() => resetTabView(ALL_TAB)}
         />
       )}
+
+      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
     </Page>
   )
 }

@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react'
 import { X, Loader2, Upload, AlertTriangle, Sparkles } from 'lucide-react'
 import { usePcStore } from '@/lib/store/pcStore'
+import { useContentStore } from '@/lib/store/contentStore'
 import { importFromDndBeyond } from '@/lib/import/ddb'
-import { importCharactersFromFile } from '@/lib/data/partyData'
+import { parseCharactersFromFile } from '@/lib/data/partyData'
+import { getAllContent } from '@/lib/db/content'
+import { autoLinkAndSeed } from '@/lib/import/autoLink'
 
 export function ImportCharactersDialog({
   onClose,
@@ -12,6 +15,7 @@ export function ImportCharactersDialog({
   onDone: (msg: string) => void
 }): JSX.Element {
   const addPc = usePcStore((s) => s.addPc)
+  const bulkImport = useContentStore((s) => s.bulkImport)
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -21,9 +25,24 @@ export function ImportCharactersDialog({
     setBusy(true)
     setError('')
     try {
-      const pc = await importFromDndBeyond(url)
+      const raw = await importFromDndBeyond(url)
+      const allContent = await getAllContent()
+      const { pc, newEntries } = autoLinkAndSeed(raw, allContent, `${raw.name || 'PC'} (imported)`)
+      if (newEntries.length) await bulkImport(newEntries)
       addPc(pc)
-      onDone(`Imported ${pc.name || 'character'} from D&D Beyond — double-check AC, HP and spell slots.`)
+      const linked = pc.inventory.filter((i) => i.contentId).length
+        + pc.features.filter((f) => f.contentId).length
+        + (pc.backgroundContentId ? 1 : 0)
+      const created = newEntries.length
+      const detail =
+        linked > 0
+          ? created > 0
+            ? ` — linked ${linked} and created ${created} library entries`
+            : ` — linked ${linked} library entr${linked === 1 ? 'y' : 'ies'}`
+          : ''
+      onDone(
+        `Imported ${pc.name || 'character'} from D&D Beyond${detail}. Double-check AC, HP and spell slots.`
+      )
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -36,8 +55,40 @@ export function ImportCharactersDialog({
     setBusy(true)
     setError('')
     try {
-      const n = await importCharactersFromFile(file)
-      onDone(`Imported ${n} character${n === 1 ? '' : 's'} from file.`)
+      const pcs = await parseCharactersFromFile(file)
+      if (!pcs.length) throw new Error('No characters found in that file.')
+
+      // Load library once; grow it in-place as stubs are added per character
+      const allContent = await getAllContent()
+      let totalLinked = 0
+      let totalCreated = 0
+
+      for (const raw of pcs) {
+        const { pc, newEntries } = autoLinkAndSeed(
+          raw,
+          allContent,
+          `${raw.name || 'PC'} (imported)`
+        )
+        if (newEntries.length) {
+          await bulkImport(newEntries)
+          allContent.push(...newEntries) // visible to subsequent characters
+          totalCreated += newEntries.length
+        }
+        totalLinked +=
+          pc.inventory.filter((i) => i.contentId).length +
+          pc.features.filter((f) => f.contentId).length +
+          (pc.backgroundContentId ? 1 : 0)
+        addPc(pc)
+      }
+
+      const n = pcs.length
+      const detail =
+        totalLinked > 0
+          ? totalCreated > 0
+            ? ` — linked ${totalLinked} and created ${totalCreated} library entries`
+            : ` — linked ${totalLinked} library entr${totalLinked === 1 ? 'y' : 'ies'}`
+          : ''
+      onDone(`Imported ${n} character${n === 1 ? '' : 's'} from file${detail}.`)
       onClose()
     } catch (e) {
       setError(String(e))
@@ -81,8 +132,9 @@ export function ImportCharactersDialog({
               </button>
             </div>
             <p className="mt-1 text-xs text-ink-muted">
-              The character's D&amp;D Beyond sharing must be set to Public. AC, HP and spell slots are
-              re-derived and worth a quick check.
+              The character's D&amp;D Beyond sharing must be set to Public. Weapons, feats and
+              background are auto-linked to your library (or created if missing). AC, HP and spell
+              slots are re-derived and worth a quick check.
             </p>
           </div>
 

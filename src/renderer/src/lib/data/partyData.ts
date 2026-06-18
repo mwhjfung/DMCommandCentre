@@ -15,22 +15,26 @@ export function exportCharacters(): number {
   return pcs.length
 }
 
-/** Read characters from a JSON file (our export shape, leniently) and add them. */
-export async function importCharactersFromFile(file: File): Promise<number> {
-  const data: unknown = JSON.parse(await file.text())
+function parseRawList(data: unknown): Array<Omit<PcUnit, 'id'>> {
   const list: unknown[] = Array.isArray(data)
     ? data
     : data && typeof data === 'object' && Array.isArray((data as { characters?: unknown }).characters)
       ? (data as { characters: unknown[] }).characters
       : [data]
+  return list
+    .filter((raw): raw is Record<string, unknown> => raw != null && typeof raw === 'object')
+    .map((raw) => coercePc(raw as Partial<PcUnit>))
+}
 
+/** Parse a JSON file into PC objects without adding them to the store. */
+export async function parseCharactersFromFile(file: File): Promise<Array<Omit<PcUnit, 'id'>>> {
+  return parseRawList(JSON.parse(await file.text()))
+}
+
+/** Read characters from a JSON file (our export shape, leniently) and add them. */
+export async function importCharactersFromFile(file: File): Promise<number> {
+  const pcs = await parseCharactersFromFile(file)
   const addPc = usePcStore.getState().addPc
-  let n = 0
-  for (const raw of list) {
-    if (raw && typeof raw === 'object') {
-      addPc(coercePc(raw as Partial<PcUnit>))
-      n += 1
-    }
-  }
-  return n
+  for (const pc of pcs) addPc(pc)
+  return pcs.length
 }
