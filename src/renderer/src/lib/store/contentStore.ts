@@ -3,6 +3,7 @@ import type { ContentEntry } from '@/types/content'
 import {
   getAllContent,
   putContent,
+  bulkPutContent,
   deleteContent,
   syncSrd,
   getSetting,
@@ -127,6 +128,7 @@ interface ContentState {
   bulkSetSource: (ids: string[], sourceName: string) => Promise<void>
   bulkMoveToCampaign: (ids: string[], campaignId: string) => Promise<void>
   bulkRemove: (ids: string[]) => Promise<void>
+  bulkImport: (entries: ContentEntry[]) => Promise<void>
   pin: (id: string) => void
   unpin: (id: string) => void
   togglePin: (id: string) => void
@@ -351,6 +353,21 @@ export const useContentStore = create<ContentState>((set, get) => ({
     const items = get().items.filter((e) => !idset.has(e.id))
     set({ items, pinnedIds, visibleItems: computeVisible(items, get().sources) })
     persistPins(pinnedIds)
+  },
+
+  bulkImport: async (entries) => {
+    let sources = get().sources
+    const activeId = getActiveCampaignId()
+    const mapped = entries.map((e) => {
+      if (e.source !== 'custom') return e
+      const r = ensureSource(sources, e.world, activeId)
+      sources = r.sources
+      return { ...e, sourceId: r.sourceId, world: r.name }
+    })
+    await bulkPutContent(mapped)
+    void setSetting(SOURCES_KEY, sources)
+    const items = await getAllContent()
+    set({ items, sources, visibleItems: computeVisible(items, sources) })
   },
 
   pin: (id) => {

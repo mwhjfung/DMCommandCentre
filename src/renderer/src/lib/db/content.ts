@@ -22,6 +22,10 @@ export async function putContent(entry: ContentEntry): Promise<void> {
   await db.content.put(entry)
 }
 
+export async function bulkPutContent(entries: ContentEntry[]): Promise<void> {
+  await db.content.bulkPut(entries)
+}
+
 export async function deleteContent(id: string): Promise<void> {
   await db.content.delete(id)
 }
