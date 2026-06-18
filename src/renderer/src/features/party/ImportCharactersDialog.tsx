@@ -33,6 +33,7 @@ export function ImportCharactersDialog({
       const linked = pc.inventory.filter((i) => i.contentId).length
         + pc.spells.filter((s) => s.contentId).length
         + pc.features.filter((f) => f.contentId).length
+        + pc.actions.filter((a) => a.contentId).length
         + (pc.backgroundContentId ? 1 : 0)
       const created = newEntries.length
       const detail =
@@ -79,6 +80,7 @@ export function ImportCharactersDialog({
           pc.inventory.filter((i) => i.contentId).length +
           pc.spells.filter((s) => s.contentId).length +
           pc.features.filter((f) => f.contentId).length +
+          pc.actions.filter((a) => a.contentId).length +
           (pc.backgroundContentId ? 1 : 0)
         addPc(pc)
       }

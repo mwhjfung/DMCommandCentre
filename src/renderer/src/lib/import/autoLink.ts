@@ -1,5 +1,5 @@
-import type { ContentEntry, ItemData, FeatData, BackgroundData, SpellData } from '@/types/content'
-import type { PcUnit, PcItem, PcFeature, PcSpell } from '@/lib/store/pcStore'
+import type { ContentEntry, ItemData, FeatData, BackgroundData, SpellData, HomebrewData } from '@/types/content'
+import type { PcUnit, PcItem, PcFeature, PcSpell, PcAction } from '@/lib/store/pcStore'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -205,6 +205,36 @@ export function autoLinkAndSeed(
   })
 
   // ---------------------------------------------------------------------------
+  // 5. Actions — link each to a library entry (feat / homebrew search first),
+  //    creating a homebrew stub if nothing matches.
+  // ---------------------------------------------------------------------------
+
+  const updatedActions: PcAction[] = (pc.actions ?? []).map((action) => {
+    if (!action.name) return action
+    const typeLabel =
+      action.type === 'action' ? 'Action' :
+      action.type === 'bonus' ? 'Bonus Action' :
+      action.type === 'reaction' ? 'Reaction' : 'Ability'
+    const contentId = resolveId(['feat', 'homebrew', 'class', 'subclass'], 'homebrew', action.name, (id) => {
+      const data: HomebrewData = { category: typeLabel, description: action.description }
+      const entry: ContentEntry = {
+        id,
+        type: 'homebrew',
+        source: 'custom',
+        name: action.name,
+        summary: action.description.slice(0, 120).trim() || action.name,
+        tags: [],
+        world: sourceName,
+        createdAt: now,
+        updatedAt: now,
+        data
+      }
+      return entry
+    })
+    return { ...action, contentId }
+  })
+
+  // ---------------------------------------------------------------------------
   // Return
   // ---------------------------------------------------------------------------
 
@@ -214,7 +244,8 @@ export function autoLinkAndSeed(
       backgroundContentId,
       inventory: updatedInventory,
       spells: updatedSpells,
-      features: updatedFeatures
+      features: updatedFeatures,
+      actions: updatedActions
     },
     newEntries
   }

@@ -30,6 +30,7 @@ export interface PcAction {
   usesMax: number
   usesCurrent: number
   description: string
+  contentId?: string
 }
 
 /** An inventory item (optionally linked to a library weapon/item). */

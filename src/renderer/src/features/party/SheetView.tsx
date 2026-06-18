@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Plus, Trash2, Star } from 'lucide-react'
 import { usePcStore, type PcUnit, type PcAction, type ActionType } from '@/lib/store/pcStore'
+import { useUiStore } from '@/lib/store/uiStore'
 import { useContentStore } from '@/lib/store/contentStore'
 import { TagSelect } from '@/components/TagSelect'
 import { DAMAGE_TYPES, PROFICIENCIES } from '@/lib/templates/schemas'
@@ -113,6 +114,7 @@ const ACTION_TABS: Array<{ key: 'all' | ActionType | 'limited'; label: string }>
 
 function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
   const updatePc = usePcStore((s) => s.updatePc)
+  const openDrawer = useUiStore((s) => s.openDrawer)
   const [tab, setTab] = useState<'all' | ActionType | 'limited'>('all')
 
   const setActions = (actions: PcAction[]): void => updatePc(pc.id, { actions })
@@ -154,7 +156,18 @@ function ActionsBlock({ pc }: { pc: PcUnit }): JSX.Element {
         {shown.map((a) => (
           <div key={a.id} className="space-y-2 rounded-md border border-border bg-surface p-2">
             <div className="flex items-center gap-2">
-              <input className="input flex-1" placeholder="Action name" value={a.name} onChange={(e) => patch(a.id, { name: e.target.value })} />
+              {a.contentId ? (
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium text-ink hover:text-accent"
+                  title="Open in library"
+                  onClick={() => openDrawer(a.contentId!)}
+                >
+                  {a.name}
+                </button>
+              ) : (
+                <input className="input flex-1" placeholder="Action name" value={a.name} onChange={(e) => patch(a.id, { name: e.target.value })} />
+              )}
               <select className="input w-28 shrink-0" value={a.type} onChange={(e) => patch(a.id, { type: e.target.value as ActionType })}>
                 <option value="action">Action</option>
                 <option value="bonus">Bonus</option>

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { coercePc, type PcUnit, type FeatureCategory, type PcSpell } from '@/lib/store/pcStore'
+import { coercePc, type PcUnit, type FeatureCategory, type PcSpell, type PcAction, type ActionType } from '@/lib/store/pcStore'
 import { abilityMod, SKILLS, type AbilityKey } from '@/lib/dnd/character'
 
 const uuid = (): string =>
@@ -199,6 +199,117 @@ function mapDdb(data: any): Partial<PcUnit> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Proficiencies — armor, weapons, tools (skip skills + saving throws).
+  // ---------------------------------------------------------------------------
+  const armorProf: string[] = []
+  const weaponProf: string[] = []
+  const toolProf: string[] = []
+  const otherProf: string[] = []
+  const seenProf = new Set<string>()
+  const savingThrowSubs = new Set(ABILITY_NAMES.map((n) => `${n}-saving-throws`))
+
+  for (const m of mods) {
+    if (m?.type !== 'proficiency') continue
+    const st = typeof m?.subType === 'string' ? m.subType.toLowerCase() : ''
+    const fn = typeof m?.friendlySubtypeName === 'string' ? m.friendlySubtypeName.trim() : st
+    if (!fn) continue
+    if (savingThrowSubs.has(st)) continue
+    if (skillKeys.has(kebabToCamel(st))) continue
+    const key = fn.toLowerCase()
+    if (seenProf.has(key)) continue
+    seenProf.add(key)
+
+    if (st.includes('armor') || st === 'shields' || st === 'shield' || fn.toLowerCase().includes('armor') || fn.toLowerCase() === 'shields') {
+      armorProf.push(fn)
+    } else if (st.includes('weapon') || fn.toLowerCase().includes('weapon')) {
+      weaponProf.push(fn)
+    } else if (/tool|kit|supplies|instrument|vehicle|set|utensil/i.test(fn)) {
+      toolProf.push(fn)
+    } else {
+      otherProf.push(fn)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Defenses — resistances, immunities, vulnerabilities (from modifiers).
+  // ---------------------------------------------------------------------------
+  const resistances: string[] = []
+  const immunities: string[] = []
+  const vulnerabilities: string[] = []
+  const seenDef = { resistance: new Set<string>(), immunity: new Set<string>(), vulnerability: new Set<string>() }
+
+  for (const m of mods) {
+    const mtype = m?.type as string
+    if (!Object.prototype.hasOwnProperty.call(seenDef, mtype)) continue
+    const fn = typeof m?.friendlySubtypeName === 'string' ? m.friendlySubtypeName.trim() : ''
+    if (!fn) continue
+    const key = fn.toLowerCase()
+    const bucket = seenDef[mtype as keyof typeof seenDef]
+    if (bucket.has(key)) continue
+    bucket.add(key)
+    if (mtype === 'resistance') resistances.push(fn)
+    else if (mtype === 'immunity') immunities.push(fn)
+    else if (mtype === 'vulnerability') vulnerabilities.push(fn)
+  }
+
+  // ---------------------------------------------------------------------------
+  // Senses — darkvision from modifiers; blindsight / tremorsense / truesight
+  // from data.senses if present.
+  // ---------------------------------------------------------------------------
+  const senses: string[] = []
+  const dvMod = mods.find((m) => m?.subType === 'darkvision' && num(m?.value, 0) > 0)
+  if (dvMod) senses.push(`Darkvision ${num(dvMod.value)} ft`)
+  const senseData = data?.senses as Record<string, number> | undefined
+  if (senseData) {
+    const senseMap: Array<[string, string]> = [
+      ['darkvision', 'Darkvision'],
+      ['blindsight', 'Blindsight'],
+      ['tremorsense', 'Tremorsense'],
+      ['truesight', 'Truesight']
+    ]
+    for (const [key, label] of senseMap) {
+      const val = num(senseData[key], 0)
+      if (val <= 0) continue
+      const entry = `${label} ${val} ft`
+      if (!senses.some((s) => s.startsWith(label))) senses.push(entry)
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Actions — class / racial / feat / other actions and bonus actions.
+  // data.actions can be { race: [...], class: [...], feat: [...], ... }
+  // or occasionally a flat array.
+  // ---------------------------------------------------------------------------
+  const mapActionType = (id: number): ActionType => {
+    if (id === 1) return 'action'
+    if (id === 3) return 'bonus'
+    if (id === 4) return 'reaction'
+    return 'other'
+  }
+
+  const rawActions: any[] = []
+  if (Array.isArray(data?.actions)) {
+    rawActions.push(...data.actions)
+  } else if (data?.actions && typeof data.actions === 'object') {
+    for (const v of Object.values(data.actions as Record<string, unknown>)) {
+      if (Array.isArray(v)) rawActions.push(...v)
+    }
+  }
+
+  const seenAction = new Set<string>()
+  const actions: PcAction[] = []
+  for (const a of rawActions) {
+    const name = typeof a?.name === 'string' ? a.name.trim() : ''
+    if (!name || seenAction.has(name.toLowerCase())) continue
+    seenAction.add(name.toLowerCase())
+    const activationTypeId = num(a?.activation?.activationTypeId ?? a?.actionTypeId, 1)
+    const type = mapActionType(activationTypeId)
+    const usesMax = num(a?.limitedUse?.maxUses ?? a?.limitedUse?.numberUsed, 0)
+    const desc = strip(a?.description ?? a?.snippet ?? '')
+    actions.push({ id: uuid(), name, type, usesMax, usesCurrent: usesMax, description: desc })
+  }
+
   return {
     name: data?.name ?? '',
     race,
@@ -212,6 +323,15 @@ function mapDdb(data: any): Partial<PcUnit> {
     saveProf,
     skillProf,
     spells,
+    senses,
+    armorProf,
+    weaponProf,
+    toolProf,
+    otherProf,
+    resistances,
+    immunities,
+    vulnerabilities,
+    actions,
     languages: [
       ...new Set(
         mods
