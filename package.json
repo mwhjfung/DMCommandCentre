@@ -1,6 +1,6 @@
 {
   "name": "dm-command",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A local-first desktop toolkit for running D&D 5e sessions, with a live voice keyword feed.",
   "author": "Fungy",
   "license": "MIT",

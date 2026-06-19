@@ -23,15 +23,13 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 export function CharacterSheet({ pc, onEdit }: { pc: PcUnit; onEdit: () => void }): JSX.Element {
   const [active, setActive] = useState<TabKey>('sheet')
 
-  const raceClassLine = [pc.race, pc.charClass, pc.level ? `Level ${pc.level}` : '']
-    .filter(Boolean)
-    .join(' · ')
-
-  const detailParts = [
+  const subtitleLine = [
+    pc.race,
+    pc.charClass,
+    pc.level ? `Level ${pc.level}` : '',
     pc.playerName ? `Player: ${pc.playerName}` : '',
     pc.background?.alignment ?? ''
-  ].filter(Boolean)
-  const detailLine = detailParts.join(' · ')
+  ].filter(Boolean).join(' · ')
 
   return (
     <div className="flex h-full flex-col">
@@ -45,11 +43,8 @@ export function CharacterSheet({ pc, onEdit }: { pc: PcUnit; onEdit: () => void 
                 <span className="shrink-0 text-xs italic text-ink-muted">"{pc.alias}"</span>
               )}
             </div>
-            {raceClassLine && (
-              <p className="mt-0.5 truncate text-[11px] text-ink-muted">{raceClassLine}</p>
-            )}
-            {detailLine && (
-              <p className="mt-0.5 truncate text-[11px] text-ink-muted">{detailLine}</p>
+            {subtitleLine && (
+              <p className="mt-0.5 truncate text-[11px] text-ink-muted">{subtitleLine}</p>
             )}
           </div>
           <button type="button" className="btn-ghost shrink-0 text-xs" onClick={onEdit}>

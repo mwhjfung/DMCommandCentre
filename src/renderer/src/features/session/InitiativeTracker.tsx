@@ -18,6 +18,7 @@ import { useCombatStore, type CombatUnit } from '@/lib/store/combatStore'
 import { useContentStore } from '@/lib/store/contentStore'
 import { useUiStore } from '@/lib/store/uiStore'
 import { ConditionsCell } from './ConditionsCell'
+import { TypeBadge } from '@/components/ContentBadge'
 import { cn } from '@/lib/cn'
 import type { ContentEntry } from '@/types/content'
 
@@ -83,7 +84,8 @@ function EntryPickCard({
           : 'hover:border-accent/70 hover:bg-accent/5'
       )}
     >
-      <span className="w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
+      <TypeBadge type={entry.type} />
+      <span className="mt-1 w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
       <span className="w-full truncate text-xs text-ink-muted" title={entry.summary || undefined}>{entry.summary || '—'}</span>
     </button>
   )
@@ -100,7 +102,6 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
   const [sourceFilter, setSourceFilter] = useState('all')
   const [selectedEntry, setSelectedEntry] = useState<ContentEntry | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
-  const gridRef = useRef<HTMLDivElement>(null)
 
   const availableSources = useMemo(() => {
     const worlds = new Set(monsters.map((m) => m.world).filter(Boolean) as string[])
@@ -112,17 +113,6 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
     const bySource = sourceFilter === 'all' ? monsters : monsters.filter((m) => m.world === sourceFilter)
     return q ? bySource.filter((m) => m.name.toLowerCase().includes(q)) : bySource
   }, [monsters, query, sourceFilter])
-
-  // Scroll selected card to top of the grid area
-  useEffect(() => {
-    if (!selectedEntry || !gridRef.current) return
-    const container = gridRef.current
-    const card = container.querySelector(`[data-entry-id="${selectedEntry.id}"]`) as HTMLElement | null
-    if (!card) return
-    const containerTop = container.getBoundingClientRect().top
-    const cardTop = card.getBoundingClientRect().top
-    container.scrollTop += cardTop - containerTop - 16
-  }, [selectedEntry?.id])
 
   const rollInit = (): void => setInit(String(Math.floor(Math.random() * 20) + 1))
 
@@ -233,7 +223,7 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
         {/* Body: card grid + detail panel side-by-side */}
         <div className="flex min-h-0 flex-1">
           {/* Card grid */}
-          <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {filtered.length > 0 ? (
               <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
                 {filtered.map((entry) => (

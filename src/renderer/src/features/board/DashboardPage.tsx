@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  LayoutGrid, Maximize2, Minimize2, Plus, Library,
-  Archive, Pencil, X, Check, Trash2, RotateCcw, Users, Copy
+  LayoutGrid, Maximize2, Minimize2, Plus, Archive, Pencil,
+  X, Check, Trash2, RotateCcw, Users, Copy, Search, PanelRightClose
 } from 'lucide-react'
 import {
   DndContext,
@@ -17,6 +17,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
 import { ContentCard } from '@/components/ContentCard'
+import { ContentDetail } from '@/components/ContentDetail'
+import { TypeBadge } from '@/components/ContentBadge'
 import { useContentStore } from '@/lib/store/contentStore'
 import { useSessionStore, type DashSession } from '@/lib/store/sessionStore'
 import { useCombatStore } from '@/lib/store/combatStore'
@@ -27,7 +29,8 @@ import { NotesPanel } from './NotesPanel'
 import { SessionDialog } from './SessionDialog'
 import { getSetting, setSetting } from '@/lib/db/content'
 import { getActiveCampaignId } from '@/lib/store/activeCampaign'
-import type { ContentEntry } from '@/types/content'
+import { CONTENT_TYPE_LABELS } from '@/types/content'
+import type { ContentEntry, ContentType } from '@/types/content'
 import { useNotesStore } from '@/lib/store/notesStore'
 import type { Note } from '@/lib/store/notesStore'
 import type { CombatUnit } from '@/lib/store/combatStore'
@@ -54,16 +57,6 @@ export function DashboardPage(): JSX.Element {
   const [showNewSession, setShowNewSession] = useState(false)
   const [expanded, setExpanded] = useState<SectionId | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('latest')
-
-  const section = (id: Exclude<SectionId, 'initiative' | 'notes'>): ReactNode => (
-    <DashSection
-      title={SECTION_TITLE[id]}
-      expanded={expanded === id}
-      onToggle={() => setExpanded((e) => (e === id ? null : id))}
-    >
-      <PinnedBoard />
-    </DashSection>
-  )
 
   return (
     <Page title="Dashboard" flush>
@@ -131,13 +124,19 @@ export function DashboardPage(): JSX.Element {
                       onToggle={() => setExpanded(null)}
                     />
                   ) : (
-                    section(expanded)
+                    <PinsDashSection
+                      expanded={true}
+                      onToggle={() => setExpanded(null)}
+                    />
                   )}
                 </div>
               ) : (
                 <div className="flex h-full flex-col gap-4">
                   <div className="min-h-0" style={{ flexGrow: 60, flexBasis: 0 }}>
-                    {section('pins')}
+                    <PinsDashSection
+                      expanded={false}
+                      onToggle={() => setExpanded('pins')}
+                    />
                   </div>
                   <div className="flex min-h-0 gap-4" style={{ flexGrow: 40, flexBasis: 0 }}>
                     <div className="min-w-0 flex-1">
@@ -380,6 +379,261 @@ function NotesDashSection({
   )
 }
 
+// ---- pin add modal ---------------------------------------------------------
+
+function PinPickCard({
+  entry,
+  selected,
+  pinned,
+  onSelect
+}: {
+  entry: ContentEntry
+  selected: boolean
+  pinned: boolean
+  onSelect: (e: ContentEntry) => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      data-entry-id={entry.id}
+      onClick={() => onSelect(entry)}
+      className={cn(
+        'panel flex w-full flex-col gap-1 overflow-hidden p-3 text-left focus:outline-none',
+        selected
+          ? 'border-accent bg-accent/5'
+          : 'hover:border-accent/70 hover:bg-accent/5'
+      )}
+    >
+      <div className="flex items-center justify-between gap-1">
+        <TypeBadge type={entry.type} />
+        {pinned && <Check size={12} className="shrink-0 text-accent" />}
+      </div>
+      <span className="mt-1 w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
+      <span className="w-full truncate text-xs text-ink-muted">{entry.summary || '—'}</span>
+    </button>
+  )
+}
+
+function PinAddModal({ onClose }: { onClose: () => void }): JSX.Element {
+  const allItems = useContentStore((s) => s.visibleItems)
+  const pinnedIds = useContentStore((s) => s.pinnedIds)
+  const pin = useContentStore((s) => s.pin)
+  const [query, setQuery] = useState('')
+  const [typeFilter, setTypeFilter] = useState<ContentType | 'all'>('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [selectedEntry, setSelectedEntry] = useState<ContentEntry | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds])
+
+  const availableTypes = useMemo(() => {
+    const present = new Set(allItems.map((i) => i.type))
+    return (Object.keys(CONTENT_TYPE_LABELS) as ContentType[]).filter((t) => present.has(t))
+  }, [allItems])
+
+  const availableSources = useMemo(() => {
+    const worlds = new Set(allItems.map((i) => i.world).filter(Boolean) as string[])
+    return Array.from(worlds).sort()
+  }, [allItems])
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    const byType = typeFilter === 'all' ? allItems : allItems.filter((i) => i.type === typeFilter)
+    const bySource = sourceFilter === 'all' ? byType : byType.filter((i) => i.world === sourceFilter)
+    return q ? bySource.filter((i) => i.name.toLowerCase().includes(q)) : bySource
+  }, [allItems, query, typeFilter, sourceFilter])
+
+  const handleSelect = (entry: ContentEntry): void => {
+    setSelectedEntry((prev) => (prev?.id === entry.id ? null : entry))
+  }
+
+  const doPin = (closeAfter = false): void => {
+    if (!selectedEntry) return
+    pin(selectedEntry.id)
+    setSelectedEntry(null)
+    if (closeAfter) {
+      onClose()
+    } else {
+      searchRef.current?.focus()
+    }
+  }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 p-8"
+      onClick={onClose}
+    >
+      <div
+        className="panel mt-[8vh] flex h-[72vh] w-[820px] flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">Add to board</h2>
+          <button type="button" className="icon-btn" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Search + source + type filters */}
+        <div className="shrink-0 border-b border-border px-4 py-2">
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search
+                size={13}
+                className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted"
+              />
+              <input
+                ref={searchRef}
+                className="input h-8 w-full pl-7 text-sm"
+                placeholder="Search library…"
+                value={query}
+                autoFocus
+                onChange={(e) => { setQuery(e.target.value); setSelectedEntry(null) }}
+              />
+            </div>
+            {availableSources.length > 0 && (
+              <select
+                className="input h-8 w-auto shrink-0 text-sm"
+                value={sourceFilter}
+                onChange={(e) => { setSourceFilter(e.target.value); setSelectedEntry(null) }}
+              >
+                <option value="all">All sources</option>
+                {availableSources.map((src) => (
+                  <option key={src} value={src}>{src}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(['all', ...availableTypes] as Array<ContentType | 'all'>).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => { setTypeFilter(t); setSelectedEntry(null) }}
+                className={cn(
+                  'rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors',
+                  typeFilter === t
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border text-ink-muted hover:border-accent/60 hover:text-ink'
+                )}
+              >
+                {t === 'all' ? 'All' : CONTENT_TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex min-h-0 flex-1">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {filtered.length > 0 ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                {filtered.map((entry) => (
+                  <PinPickCard
+                    key={entry.id}
+                    entry={entry}
+                    selected={selectedEntry?.id === entry.id}
+                    pinned={pinnedSet.has(entry.id)}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-sm text-ink-muted">
+                {query.trim() ? `No matches for "${query.trim()}".` : 'Nothing in library yet.'}
+              </p>
+            )}
+          </div>
+
+          {selectedEntry && (
+            <div className="flex w-[280px] shrink-0 flex-col border-l border-border">
+              <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Details</span>
+                <button type="button" className="icon-btn" onClick={() => setSelectedEntry(null)}>
+                  <PanelRightClose size={15} />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <ContentDetail entry={selectedEntry} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border px-4 py-3">
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={!selectedEntry}
+            onClick={() => doPin(true)}
+          >
+            Add and close
+          </button>
+          <button
+            type="button"
+            className="btn-accent"
+            disabled={!selectedEntry}
+            onClick={() => doPin()}
+          >
+            <Plus size={14} />
+            Add to board
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---- pins dash section -----------------------------------------------------
+
+function PinsDashSection({
+  expanded,
+  onToggle
+}: {
+  expanded: boolean
+  onToggle: () => void
+}): JSX.Element {
+  const [addOpen, setAddOpen] = useState(false)
+
+  return (
+    <div className="panel flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Pinned cards</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="flex h-[26px] items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-medium text-accent-fg hover:bg-accent-strong"
+          >
+            <Plus size={13} />
+            Add
+          </button>
+          <button
+            type="button"
+            className="icon-btn h-5 w-5"
+            title={expanded ? 'Minimize' : 'Expand'}
+            onClick={onToggle}
+          >
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <PinnedBoard onAdd={() => setAddOpen(true)} />
+      </div>
+      {addOpen && <PinAddModal onClose={() => setAddOpen(false)} />}
+    </div>
+  )
+}
+
 // ---- pinned cards board ----------------------------------------------------
 
 function SortableCard({ entry }: { entry: ContentEntry }): JSX.Element {
@@ -397,8 +651,7 @@ function SortableCard({ entry }: { entry: ContentEntry }): JSX.Element {
   )
 }
 
-function PinnedBoard(): JSX.Element {
-  const navigate = useNavigate()
+function PinnedBoard({ onAdd }: { onAdd: () => void }): JSX.Element {
   const items = useContentStore((s) => s.items)
   const pinnedIds = useContentStore((s) => s.pinnedIds)
   const reorderPins = useContentStore((s) => s.reorderPins)
@@ -427,9 +680,9 @@ function PinnedBoard(): JSX.Element {
         title="No pinned cards"
         description="Pin spells, monsters, items and more from the Library to keep them on this session's board."
       >
-        <button type="button" className="btn-accent" onClick={() => navigate('/library')}>
-          <Library size={16} />
-          Go to Library
+        <button type="button" className="btn-accent" onClick={onAdd}>
+          <Plus size={16} />
+          Add
         </button>
       </EmptyState>
     )
@@ -445,11 +698,11 @@ function PinnedBoard(): JSX.Element {
             ))}
             <button
               type="button"
-              onClick={() => navigate('/library')}
-              className="group flex h-full min-h-[92px] flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-border text-ink-muted opacity-60 transition-all hover:border-accent/60 hover:text-ink hover:opacity-100"
+              onClick={onAdd}
+              className="btn-accent flex h-full min-h-[92px] flex-col items-center justify-center gap-1.5"
             >
-              <Plus size={20} />
-              <span className="text-sm font-medium">Add from Library</span>
+              <Plus size={18} />
+              Add
             </button>
           </div>
         </SortableContext>

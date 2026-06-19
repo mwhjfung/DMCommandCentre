@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Moon, Coffee, Users, Upload, Download } from 'lucide-react'
+import { Plus, Users, Download } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
 import { usePcStore, type PcUnit } from '@/lib/store/pcStore'
@@ -7,25 +7,20 @@ import { useUiStore } from '@/lib/store/uiStore'
 import { exportCharacters } from '@/lib/data/partyData'
 import { CharacterSheet } from './CharacterSheet'
 import { CharacterDialog } from './CharacterDialog'
-import { ImportCharactersDialog } from './ImportCharactersDialog'
 import { cn } from '@/lib/cn'
 
 type DialogState = { mode: 'add' } | { mode: 'edit'; pc: PcUnit } | null
 
 export function PartyPage(): JSX.Element {
   const pcs = usePcStore((s) => s.pcs)
-  const longRest = usePcStore((s) => s.longRest)
-  const shortRest = usePcStore((s) => s.shortRest)
   const activePcId = useUiStore((s) => s.activePcId)
   const setActivePcId = useUiStore((s) => s.setActivePcId)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<DialogState>(null)
-  const [importOpen, setImportOpen] = useState(false)
   const [status, setStatus] = useState('')
 
   const selected = pcs.find((p) => p.id === selectedId) ?? pcs[0] ?? null
 
-  // Jump to a PC when navigated here from global search
   useEffect(() => {
     if (!activePcId) return
     setSelectedId(activePcId)
@@ -57,22 +52,6 @@ export function PartyPage(): JSX.Element {
               Export
             </button>
           )}
-          <button type="button" className="btn-ghost" onClick={() => setImportOpen(true)}>
-            <Upload size={15} />
-            Import
-          </button>
-          {pcs.length > 0 && (
-            <>
-              <button type="button" className="btn-ghost" onClick={shortRest}>
-                <Coffee size={15} />
-                Short rest
-              </button>
-              <button type="button" className="btn-ghost" onClick={longRest}>
-                <Moon size={15} />
-                Long rest
-              </button>
-            </>
-          )}
           <button type="button" className="btn-accent" onClick={() => setDialog({ mode: 'add' })}>
             <Plus size={15} />
             Add character
@@ -93,20 +72,13 @@ export function PartyPage(): JSX.Element {
             title="No characters yet"
             description="Add your players' characters to keep their full sheets at hand — or import a JSON export."
           >
-            <div className="flex items-center gap-2">
-              <button type="button" className="btn-outline" onClick={() => setImportOpen(true)}>
-                <Upload size={16} />
-                Import
-              </button>
-              <button type="button" className="btn-accent" onClick={() => setDialog({ mode: 'add' })}>
-                <Plus size={16} />
-                Add character
-              </button>
-            </div>
+            <button type="button" className="btn-accent" onClick={() => setDialog({ mode: 'add' })}>
+              <Plus size={16} />
+              Add character
+            </button>
           </EmptyState>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            {/* Horizontal PC name tabs */}
             <div className="flex shrink-0 overflow-x-auto border-b border-border">
               {pcs.map((pc) => (
                 <button
@@ -124,8 +96,6 @@ export function PartyPage(): JSX.Element {
                 </button>
               ))}
             </div>
-
-            {/* Character sheet */}
             <div className="min-h-0 flex-1">
               {selected && (
                 <CharacterSheet
@@ -144,10 +114,8 @@ export function PartyPage(): JSX.Element {
           mode={dialog.mode}
           pc={dialog.mode === 'edit' ? dialog.pc : undefined}
           onClose={() => setDialog(null)}
+          onDone={(m) => setStatus(m)}
         />
-      )}
-      {importOpen && (
-        <ImportCharactersDialog onClose={() => setImportOpen(false)} onDone={(m) => setStatus(m)} />
       )}
     </Page>
   )
