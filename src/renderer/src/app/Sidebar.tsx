@@ -2,7 +2,6 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutGrid,
   Library,
-  Swords,
   Users,
   Settings,
   AudioLines,
@@ -19,7 +18,6 @@ import { cn } from '@/lib/cn'
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/library', label: 'Library', icon: Library, end: false },
-  { to: '/session', label: 'Session', icon: Swords, end: false },
   { to: '/party', label: 'Party', icon: Users, end: false }
 ] as const
 

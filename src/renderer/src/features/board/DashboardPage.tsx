@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutGrid, Maximize2, Minimize2, Plus, Library,
-  Archive, Pencil, X, Check, Trash2, RotateCcw
+  Archive, Pencil, X, Check, Trash2, RotateCcw, Users
 } from 'lucide-react'
 import {
   DndContext,
@@ -19,7 +19,10 @@ import { EmptyState } from '@/components/EmptyState'
 import { ContentCard } from '@/components/ContentCard'
 import { useContentStore } from '@/lib/store/contentStore'
 import { useSessionStore, type DashSession } from '@/lib/store/sessionStore'
+import { useCombatStore } from '@/lib/store/combatStore'
+import { usePcStore, type PcUnit } from '@/lib/store/pcStore'
 import { InitiativeTracker } from '@/features/session/InitiativeTracker'
+import { SplitButton } from '@/components/SplitButton'
 import { NotesPanel } from './NotesPanel'
 import { SessionDialog } from './SessionDialog'
 import { getSetting, setSetting } from '@/lib/db/content'
@@ -48,7 +51,7 @@ export function DashboardPage(): JSX.Element {
   const [expanded, setExpanded] = useState<SectionId | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('latest')
 
-  const section = (id: SectionId): ReactNode => (
+  const section = (id: Exclude<SectionId, 'initiative'>): ReactNode => (
     <DashSection
       title={SECTION_TITLE[id]}
       expanded={expanded === id}
@@ -56,8 +59,6 @@ export function DashboardPage(): JSX.Element {
     >
       {id === 'pins' ? (
         <PinnedBoard />
-      ) : id === 'initiative' ? (
-        <InitiativeTracker />
       ) : (
         <NotesPanel expanded={expanded === 'notes'} />
       )}
@@ -118,14 +119,28 @@ export function DashboardPage(): JSX.Element {
           {mainTab === 'latest' ? (
             <div className="h-full p-4">
               {expanded ? (
-                <div className="h-full">{section(expanded)}</div>
+                <div className="h-full">
+                  {expanded === 'initiative' ? (
+                    <InitiativeDashSection
+                      expanded={true}
+                      onToggle={() => setExpanded(null)}
+                    />
+                  ) : (
+                    section(expanded)
+                  )}
+                </div>
               ) : (
                 <div className="flex h-full flex-col gap-4">
                   <div className="min-h-0" style={{ flexGrow: 60, flexBasis: 0 }}>
                     {section('pins')}
                   </div>
                   <div className="flex min-h-0 gap-4" style={{ flexGrow: 40, flexBasis: 0 }}>
-                    <div className="min-w-0 flex-1">{section('initiative')}</div>
+                    <div className="min-w-0 flex-1">
+                      <InitiativeDashSection
+                        expanded={false}
+                        onToggle={() => setExpanded('initiative')}
+                      />
+                    </div>
                     <div className="min-w-0 flex-1">{section('notes')}</div>
                   </div>
                 </div>
@@ -171,6 +186,121 @@ function DashSection({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+    </div>
+  )
+}
+
+// ---- initiative dash section (custom header) --------------------------------
+
+function InitiativeDashSection({
+  expanded,
+  onToggle
+}: {
+  expanded: boolean
+  onToggle: () => void
+}): JSX.Element {
+  const pcs = usePcStore((s) => s.pcs)
+  const units = useCombatStore((s) => s.units)
+  const addUnit = useCombatStore((s) => s.addUnit)
+  const [addOpen, setAddOpen] = useState(false)
+
+  const addAllParty = (): void => {
+    const existing = new Set(units.map((u) => u.name.toLowerCase()))
+    pcs.forEach((pc) => {
+      if (existing.has(pc.name.toLowerCase())) return
+      addUnit({
+        name: pc.name,
+        isPC: true,
+        initiative: 0,
+        locked: false,
+        hpCurrent: pc.currentHp,
+        hpMax: pc.maxHp,
+        hpTemp: pc.tempHp,
+        conditions: []
+      })
+    })
+  }
+
+  const addOnePc = (pc: PcUnit): void => {
+    const existing = new Set(units.map((u) => u.name.toLowerCase()))
+    if (existing.has(pc.name.toLowerCase())) return
+    addUnit({
+      name: pc.name,
+      isPC: true,
+      initiative: 0,
+      locked: false,
+      hpCurrent: pc.currentHp,
+      hpMax: pc.maxHp,
+      hpTemp: pc.tempHp,
+      conditions: []
+    })
+  }
+
+  return (
+    <div className="panel flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        {/* Title + expand/collapse toggle always inline */}
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Initiative</span>
+          <button
+            type="button"
+            className="icon-btn h-5 w-5"
+            title={expanded ? 'Minimize' : 'Expand'}
+            onClick={onToggle}
+          >
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1.5">
+          <SplitButton
+            label="Add party"
+            icon={<Users size={13} />}
+            onMain={addAllParty}
+            disabled={pcs.length === 0}
+            dropdownContent={
+              <>
+                <p className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+                  Add individual
+                </p>
+                {pcs.map((pc) => {
+                  const already = units.some((u) => u.name.toLowerCase() === pc.name.toLowerCase())
+                  return (
+                    <button
+                      key={pc.id}
+                      type="button"
+                      disabled={already}
+                      onClick={() => addOnePc(pc)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm text-ink hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-40"
+                    >
+                      <span className="truncate">{pc.name}</span>
+                      {already && <Check size={12} className="shrink-0 text-accent" />}
+                    </button>
+                  )
+                })}
+              </>
+            }
+          />
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="flex h-[26px] items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-medium text-accent-fg hover:bg-accent-strong"
+          >
+            <Plus size={13} />
+            Add
+          </button>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <InitiativeTracker
+          addOpen={addOpen}
+          onCloseAdd={() => setAddOpen(false)}
+          onAdd={() => setAddOpen(true)}
+          onAddParty={addAllParty}
+        />
+      </div>
     </div>
   )
 }

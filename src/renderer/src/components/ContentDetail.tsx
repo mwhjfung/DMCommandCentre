@@ -145,6 +145,7 @@ function AddToInitiativeButton({ entry }: { entry: ContentOfType<'monster'> }): 
       locked: false,
       hpCurrent: hpAvg,
       hpMax: hpAvg,
+      hpTemp: 0,
       conditions: []
     })
   }

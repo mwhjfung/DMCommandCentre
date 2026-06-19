@@ -514,17 +514,19 @@ export function SheetView({ pc }: { pc: PcUnit }): JSX.Element {
             </button>
             {/* Temp HP */}
             <div className="ml-auto flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Temp</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-400">Tmp</span>
               <input
                 type="number"
                 value={pc.tempHp}
                 onChange={(e) => {
                   const val = Math.max(0, Number(e.target.value))
                   updatePc(pc.id, { tempHp: val })
-                  setTempHpMax(val > 0 ? val : 0)
+                  if (val > 0) setTempHpMax(val)
                 }}
                 className="w-12 rounded bg-surface-2 px-1 py-0.5 text-center text-sm text-ink focus:outline-none"
               />
+              <span className="text-ink-muted">/</span>
+              <span className="text-sm text-ink-muted">{tempHpMax}</span>
             </div>
           </div>
         </Panel>

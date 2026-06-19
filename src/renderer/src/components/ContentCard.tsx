@@ -43,7 +43,7 @@ export function ContentCard({ entry, dragHandle, onToggleSelect, selected }: Con
           className="mt-1 h-4 w-4 shrink-0 accent-accent"
         />
       )}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2" {...dragHandle}>
             <TypeBadge type={entry.type} />
@@ -66,8 +66,8 @@ export function ContentCard({ entry, dragHandle, onToggleSelect, selected }: Con
             <Pin size={15} className={pinned ? 'fill-accent' : ''} />
           </button>
         </div>
-        <h3 className="mt-1.5 truncate font-medium text-ink">{entry.name}</h3>
-        <p className="mt-0.5 line-clamp-2 text-sm text-ink-muted">{entry.summary || '—'}</p>
+        <h3 className="mt-1.5 w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</h3>
+        <p className="mt-0.5 w-full truncate text-sm text-ink-muted" title={entry.summary || undefined}>{entry.summary || '—'}</p>
       </div>
     </div>
   )

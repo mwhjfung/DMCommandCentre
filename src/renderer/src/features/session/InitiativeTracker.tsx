@@ -6,18 +6,19 @@ import {
   Plus,
   X,
   Swords,
-  Users,
   Lock,
   LockOpen,
-  MoreVertical
+  Search
 } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
+import { ContentDetail } from '@/components/ContentDetail'
 import { useCombatStore, type CombatUnit } from '@/lib/store/combatStore'
-import { usePcStore } from '@/lib/store/pcStore'
 import { useContentStore } from '@/lib/store/contentStore'
 import { useUiStore } from '@/lib/store/uiStore'
 import { ConditionsCell } from './ConditionsCell'
+import { TypeBadge } from '@/components/ContentBadge'
 import { cn } from '@/lib/cn'
+import type { ContentEntry } from '@/types/content'
 
 const parseHp = (s: string | undefined): number => (s ? parseInt(s, 10) || 0 : 0)
 
@@ -29,187 +30,308 @@ function hpColor(current: number, max: number): string {
   return 'bg-danger'
 }
 
-function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
-  const addUnit = useCombatStore((s) => s.addUnit)
-  const monsters = useContentStore((s) => s.visibleItems.filter((i) => i.type === 'monster'))
-  const [name, setName] = useState('')
-  const [hp, setHp] = useState('')
-  const [init, setInit] = useState('')
-  const [count, setCount] = useState(1)
-  const [isPC, setIsPC] = useState(false)
-  const nameRef = useRef<HTMLInputElement>(null)
+// ---- temp HP pie (mirrors the one in SheetView) -----------------------------
 
-  const rollInit = (): void => setInit(String(Math.floor(Math.random() * 20) + 1))
+function TempHpPie({ value, max }: { value: number; max: number }): JSX.Element {
+  const size = 22
+  const cx = size / 2
+  const cy = size / 2
+  const r = size / 2 - 1.5
+  const pct = max > 0 ? Math.min(1, value / max) : 0
 
-  // Add keeps the modal open and resets for the next one. Non-PCs can be added
-  // in a batch (e.g. 5 goblins) — each becomes its own numbered entry.
-  const submit = (): void => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    const match = monsters.find((m) => m.name.toLowerCase() === trimmed.toLowerCase())
-    const hpMax = hp ? Number(hp) : match ? parseHp((match.data as { hp?: string }).hp) : 0
-    const n = isPC ? 1 : Math.max(1, Math.floor(Number(count) || 1))
-    for (let i = 0; i < n; i += 1) {
-      addUnit({
-        name: n > 1 ? `${trimmed} ${i + 1}` : trimmed,
-        contentId: match?.id,
-        isPC,
-        initiative: init ? Number(init) : 0,
-        locked: false,
-        hpCurrent: hpMax,
-        hpMax,
-        conditions: []
-      })
-    }
-    setName('')
-    setHp('')
-    setInit('')
-    setCount(1)
-    nameRef.current?.focus()
+  let wedge: string | null = null
+  if (pct > 0 && pct < 1) {
+    const start = -Math.PI / 2
+    const end = start + pct * 2 * Math.PI
+    const x1 = cx + r * Math.cos(start)
+    const y1 = cy + r * Math.sin(start)
+    const x2 = cx + r * Math.cos(end)
+    const y2 = cy + r * Math.sin(end)
+    wedge = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${pct > 0.5 ? 1 : 0} 1 ${x2} ${y2} Z`
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 p-8" onClick={onClose}>
-      <div className="panel mt-[10vh] w-[420px]" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+    <svg width={size} height={size} className="shrink-0" aria-hidden>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={1.5} className="text-blue-400/30" />
+      {pct >= 1 && <circle cx={cx} cy={cy} r={r} className="fill-blue-400/70" />}
+      {wedge && <path d={wedge} className="fill-blue-400/70" />}
+    </svg>
+  )
+}
+
+// ---- monster pick card (for the add modal) ----------------------------------
+
+function EntryPickCard({
+  entry,
+  selected,
+  onSelect
+}: {
+  entry: ContentEntry
+  selected: boolean
+  onSelect: (e: ContentEntry) => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      data-entry-id={entry.id}
+      onClick={() => onSelect(entry)}
+      className={cn(
+        'panel flex w-full flex-col gap-1 overflow-hidden p-3 text-left focus:outline-none',
+        selected
+          ? 'border-accent bg-accent/5'
+          : 'hover:border-accent/70 hover:bg-accent/5'
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <TypeBadge type={entry.type} />
+      </div>
+      <span className="mt-1 w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
+      <span className="w-full truncate text-xs text-ink-muted" title={entry.summary || undefined}>{entry.summary || '—'}</span>
+    </button>
+  )
+}
+
+// ---- add combatant modal (card view) ----------------------------------------
+
+function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
+  const addUnit = useCombatStore((s) => s.addUnit)
+  const monsters = useContentStore((s) => s.visibleItems.filter((i) => i.type === 'monster'))
+  const [query, setQuery] = useState('')
+  const [init, setInit] = useState('')
+  const [count, setCount] = useState(1)
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [selectedEntry, setSelectedEntry] = useState<ContentEntry | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  const availableSources = useMemo(() => {
+    const worlds = new Set(monsters.map((m) => m.world).filter(Boolean) as string[])
+    return Array.from(worlds).sort()
+  }, [monsters])
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    const bySource = sourceFilter === 'all' ? monsters : monsters.filter((m) => m.world === sourceFilter)
+    return q ? bySource.filter((m) => m.name.toLowerCase().includes(q)) : bySource
+  }, [monsters, query, sourceFilter])
+
+  // Scroll selected card to top of the grid area
+  useEffect(() => {
+    if (!selectedEntry || !gridRef.current) return
+    const container = gridRef.current
+    const card = container.querySelector(`[data-entry-id="${selectedEntry.id}"]`) as HTMLElement | null
+    if (!card) return
+    const containerTop = container.getBoundingClientRect().top
+    const cardTop = card.getBoundingClientRect().top
+    container.scrollTop += cardTop - containerTop - 16
+  }, [selectedEntry?.id])
+
+  const rollInit = (): void => setInit(String(Math.floor(Math.random() * 20) + 1))
+
+  const handleSelect = (entry: ContentEntry): void => {
+    setSelectedEntry((prev) => (prev?.id === entry.id ? null : entry))
+  }
+
+  const canAdd = selectedEntry !== null || query.trim().length > 0
+
+  const doAdd = (closeAfter: boolean): void => {
+    const n = Math.max(1, Math.floor(Number(count) || 1))
+    const initVal = init !== '' ? Number(init) : 0
+    if (selectedEntry) {
+      const hpMax = parseHp((selectedEntry.data as { hp?: string }).hp)
+      for (let i = 0; i < n; i++) {
+        addUnit({
+          name: n > 1 ? `${selectedEntry.name} ${i + 1}` : selectedEntry.name,
+          contentId: selectedEntry.id,
+          isPC: false,
+          initiative: initVal,
+          locked: false,
+          hpCurrent: hpMax,
+          hpMax,
+          hpTemp: 0,
+          conditions: []
+        })
+      }
+    } else {
+      const trimmed = query.trim()
+      if (!trimmed) return
+      for (let i = 0; i < n; i++) {
+        addUnit({
+          name: n > 1 ? `${trimmed} ${i + 1}` : trimmed,
+          isPC: false,
+          initiative: initVal,
+          locked: false,
+          hpCurrent: 0,
+          hpMax: 0,
+          hpTemp: 0,
+          conditions: []
+        })
+      }
+    }
+    if (closeAfter) {
+      onClose()
+    } else {
+      setQuery('')
+      setSelectedEntry(null)
+      setCount(1)
+      setInit('')
+      searchRef.current?.focus()
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center bg-black/50 p-8"
+      onClick={onClose}
+    >
+      <div
+        className="panel mt-[8vh] flex h-[72vh] w-[820px] flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-ink">Add to initiative</h2>
           <button type="button" className="icon-btn" onClick={onClose}>
             <X size={16} />
           </button>
         </div>
 
-        <div className="space-y-3 p-4">
-          <div>
-            <label className="label">Name</label>
-            <input
-              ref={nameRef}
-              className="input"
-              list="lib-monsters"
-              autoFocus
-              placeholder="PC name or library monster…"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && submit()}
+        {/* Search + Source */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted"
             />
-            <datalist id="lib-monsters">
-              {monsters.map((m) => (
-                <option key={m.id} value={m.name} />
+            <input
+              ref={searchRef}
+              className="input h-8 pl-7 text-sm"
+              placeholder="Search library or enter name…"
+              value={query}
+              autoFocus
+              onChange={(e) => {
+                setQuery(e.target.value)
+                setSelectedEntry(null)
+              }}
+            />
+          </div>
+          {availableSources.length > 0 && (
+            <select
+              className="input h-8 w-auto shrink-0 text-sm"
+              value={sourceFilter}
+              onChange={(e) => {
+                setSourceFilter(e.target.value)
+                setSelectedEntry(null)
+              }}
+            >
+              <option value="all">All sources</option>
+              {availableSources.map((src) => (
+                <option key={src} value={src}>{src}</option>
               ))}
-            </datalist>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="w-20">
-              <label className="label">HP</label>
-              <input className="input" type="number" value={hp} onChange={(e) => setHp(e.target.value)} />
-            </div>
-            <div>
-              <label className="label">Init</label>
-              <div className="flex items-center gap-1">
-                <input
-                  className="input w-16"
-                  type="number"
-                  value={init}
-                  onChange={(e) => setInit(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && submit()}
-                />
-                <button
-                  type="button"
-                  className="icon-btn shrink-0"
-                  title="Roll d20"
-                  onClick={rollInit}
-                >
-                  <Dices size={15} />
-                </button>
-              </div>
-            </div>
-            {!isPC && (
-              <div className="w-20">
-                <label className="label">Count</label>
-                <input
-                  className="input"
-                  type="number"
-                  min={1}
-                  value={count}
-                  onChange={(e) => setCount(Number(e.target.value))}
-                  onKeyDown={(e) => e.key === 'Enter' && submit()}
-                />
-              </div>
-            )}
-            <label className="flex h-9 cursor-pointer items-center gap-1.5 text-sm text-ink-muted">
-              <input type="checkbox" checked={isPC} onChange={(e) => setIsPC(e.target.checked)} />
-              PC
-            </label>
-          </div>
+            </select>
+          )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-border px-4 py-3">
-          <button type="button" className="btn-ghost" onClick={onClose}>
-            Close
-          </button>
-          <button type="button" className="btn-accent" disabled={!name.trim()} onClick={submit}>
-            <Plus size={15} />
-            Add
-          </button>
+        {/* Body: card grid + detail panel side-by-side */}
+        <div className="flex min-h-0 flex-1">
+          {/* Card grid */}
+          <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+            {filtered.length > 0 ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-3">
+                {filtered.map((entry) => (
+                  <EntryPickCard
+                    key={entry.id}
+                    entry={entry}
+                    selected={selectedEntry?.id === entry.id}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <p className="text-sm text-ink-muted">
+                  {query.trim() ? `No matches for "${query.trim()}".` : 'No monsters in library yet.'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Detail panel (right drawer) */}
+          {selectedEntry && (
+            <div className="flex w-[280px] shrink-0 flex-col border-l border-border">
+              <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Details</span>
+                <button type="button" className="icon-btn" onClick={() => setSelectedEntry(null)}>
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <ContentDetail entry={selectedEntry} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-3">
+          {/* Left: Initiative + Count */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-ink-muted">Initiative</span>
+              <input
+                className="input h-8 w-14 text-center text-sm"
+                type="number"
+                value={init}
+                placeholder="—"
+                onChange={(e) => setInit(e.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-btn h-8 w-8 shrink-0"
+                title="Roll d20"
+                onClick={rollInit}
+              >
+                <Dices size={14} />
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-ink-muted">Count</span>
+              <input
+                className="input h-8 w-14 text-center text-sm"
+                type="number"
+                min={1}
+                value={count}
+                onChange={(e) => setCount(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
+          </div>
+          {/* Right: Add buttons */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-ghost"
+              disabled={!canAdd}
+              onClick={() => doAdd(true)}
+            >
+              Add and close
+            </button>
+            <button
+              type="button"
+              className="btn-accent"
+              disabled={!canAdd}
+              onClick={() => doAdd(false)}
+            >
+              <Plus size={14} />
+              Add to initiative
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function KebabMenu({
-  onAdd,
-  onAddParty,
-  onRollAll,
-  onReset,
-  hasPcs
-}: {
-  onAdd: () => void
-  onAddParty: () => void
-  onRollAll: () => void
-  onReset: () => void
-  hasPcs: boolean
-}): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent): void => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
-
-  const item = (label: string, icon: JSX.Element, action: () => void, disabled = false): JSX.Element => (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => { action(); setOpen(false) }}
-      className="flex w-full items-center gap-2 px-3 py-1.5 text-sm text-ink hover:bg-surface-2 disabled:pointer-events-none disabled:opacity-40"
-    >
-      {icon}
-      {label}
-    </button>
-  )
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" className="icon-btn" onClick={() => setOpen((o) => !o)}>
-        <MoreVertical size={16} />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 min-w-[148px] rounded-lg border border-border bg-surface py-1 shadow-lg">
-          {item('Add', <Plus size={14} />, onAdd)}
-          {item('Add party', <Users size={14} />, onAddParty, !hasPcs)}
-          <div className="my-1 border-t border-border" />
-          {item('Roll all', <Dices size={14} />, onRollAll)}
-          {item('Reset', <RotateCcw size={14} />, onReset)}
-        </div>
-      )}
-    </div>
-  )
-}
+// ---- combat row -------------------------------------------------------------
 
 function CombatRow({
   unit,
@@ -225,11 +347,21 @@ function CombatRow({
   const sort = useCombatStore((s) => s.sort)
   const openDrawer = useUiStore((s) => s.openDrawer)
   const [amt, setAmt] = useState('')
+  const [tempHpMax, setTempHpMax] = useState(unit.hpTemp)
 
   const applyDamage = (sign: number): void => {
     const n = Number(amt)
     if (!n) return
-    update(unit.id, { hpCurrent: Math.max(0, Math.min(unit.hpMax, unit.hpCurrent - sign * n)) })
+    if (sign > 0 && unit.hpTemp > 0) {
+      const tempDrain = Math.min(unit.hpTemp, n)
+      const remaining = n - tempDrain
+      update(unit.id, {
+        hpTemp: unit.hpTemp - tempDrain,
+        hpCurrent: Math.max(0, Math.min(unit.hpMax, unit.hpCurrent - remaining))
+      })
+    } else {
+      update(unit.id, { hpCurrent: Math.max(0, Math.min(unit.hpMax, unit.hpCurrent - sign * n)) })
+    }
     setAmt('')
   }
 
@@ -241,6 +373,17 @@ function CombatRow({
         current ? 'border-accent bg-accent/5' : 'border-border bg-surface opacity-50 hover:opacity-100'
       )}
     >
+      {/* Remove button */}
+      <button
+        type="button"
+        className="icon-btn h-7 w-7 shrink-0 self-center hover:text-danger"
+        title="Remove"
+        onClick={() => remove(unit.id)}
+      >
+        <X size={15} />
+      </button>
+
+      {/* Initiative column */}
       <div className="flex w-12 shrink-0 flex-col items-center gap-0.5">
         <input
           type="number"
@@ -262,6 +405,7 @@ function CombatRow({
         </div>
       </div>
 
+      {/* Name + conditions */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           {current && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
@@ -288,13 +432,19 @@ function CombatRow({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col gap-1 self-center">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-          <div
-            className={cn('h-full transition-all', hpColor(unit.hpCurrent, unit.hpMax))}
-            style={{ width: `${unit.hpMax ? (unit.hpCurrent / unit.hpMax) * 100 : 0}%` }}
-          />
+      {/* HP panel — styled like the character sheet */}
+      <div className="flex shrink-0 flex-col gap-1.5 self-center">
+        {/* Bar + temp pie */}
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 min-w-[72px] flex-1 overflow-hidden rounded-full bg-surface-3">
+            <div
+              className={cn('h-full transition-all', hpColor(unit.hpCurrent, unit.hpMax))}
+              style={{ width: `${unit.hpMax ? Math.min(100, (unit.hpCurrent / unit.hpMax) * 100) : 0}%` }}
+            />
+          </div>
+          <TempHpPie value={unit.hpTemp} max={tempHpMax} />
         </div>
+        {/* HP controls + temp HP inline */}
         <div className="flex items-center gap-1">
           <input
             type="number"
@@ -315,7 +465,7 @@ function CombatRow({
             placeholder="±"
             onChange={(e) => setAmt(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applyDamage(1)}
-            className="ml-1 w-12 rounded border border-border bg-surface-2 px-1 py-0.5 text-center text-sm focus:outline-none"
+            className="ml-1 w-10 rounded border border-border bg-surface-2 px-1 py-0.5 text-center text-sm focus:outline-none"
           />
           <button
             type="button"
@@ -333,31 +483,48 @@ function CombatRow({
           >
             +
           </button>
+          <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-blue-400">Tmp</span>
+          <input
+            type="number"
+            value={unit.hpTemp}
+            onChange={(e) => {
+              const val = Math.max(0, Number(e.target.value))
+              update(unit.id, { hpTemp: val })
+              if (val > 0) setTempHpMax(val)
+            }}
+            title="Temporary HP"
+            className="w-10 rounded bg-surface-2 px-1 py-0.5 text-center text-sm text-ink focus:outline-none"
+          />
+          <span className="text-ink-muted">/</span>
+          <span className="text-sm text-ink-muted">{tempHpMax}</span>
         </div>
       </div>
 
-      <button
-        type="button"
-        className="icon-btn ml-3 h-7 w-7 shrink-0 self-center hover:text-danger"
-        title="Remove"
-        onClick={() => remove(unit.id)}
-      >
-        <X size={15} />
-      </button>
     </div>
   )
 }
 
-export function InitiativeTracker(): JSX.Element {
+// ---- initiative tracker -----------------------------------------------------
+
+interface InitiativeTrackerProps {
+  addOpen: boolean
+  onCloseAdd: () => void
+  onAdd: () => void
+  onAddParty: () => void
+}
+
+export function InitiativeTracker({
+  addOpen,
+  onCloseAdd,
+  onAdd,
+  onAddParty
+}: InitiativeTrackerProps): JSX.Element {
   const units = useCombatStore((s) => s.units)
   const round = useCombatStore((s) => s.round)
   const turnId = useCombatStore((s) => s.turnId)
   const nextTurn = useCombatStore((s) => s.nextTurn)
   const rollAll = useCombatStore((s) => s.rollAll)
   const reset = useCombatStore((s) => s.reset)
-  const addUnit = useCombatStore((s) => s.addUnit)
-  const pcs = usePcStore((s) => s.pcs)
-  const [addOpen, setAddOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const [anim, setAnim] = useState<{ order: CombatUnit[]; ghost: CombatUnit; shift: number } | null>(
@@ -365,18 +532,13 @@ export function InitiativeTracker(): JSX.Element {
   )
 
   const ordered = useMemo(() => [...units].sort((a, b) => b.initiative - a.initiative), [units])
-  // Rotate so the current turn is always at the top; the rest wrap below it.
   const turnIdx = ordered.findIndex((u) => u.id === turnId)
   const rotated = turnIdx >= 0 ? [...ordered.slice(turnIdx), ...ordered.slice(0, turnIdx)] : ordered
 
-  // Scroll the list back to the top whenever the turn advances.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
   }, [turnId])
 
-  // Advance the turn with a scroll-up: the finished top card slides up and fades
-  // out, the rest move up a slot, and the card wraps back in at the bottom. We
-  // play the animation first, then commit the turn change once it lands.
   const advance = (): void => {
     if (anim) return
     if (rotated.length < 2) {
@@ -384,7 +546,7 @@ export function InitiativeTracker(): JSX.Element {
       return
     }
     const firstEl = listRef.current?.firstElementChild as HTMLElement | null
-    const shift = -((firstEl?.offsetHeight ?? 64) + 8) // one row + the space-y gap
+    const shift = -((firstEl?.offsetHeight ?? 64) + 8)
     if (scrollRef.current) scrollRef.current.scrollTop = 0
     setAnim({ order: rotated, ghost: rotated[0], shift: 0 })
     requestAnimationFrame(() =>
@@ -397,22 +559,6 @@ export function InitiativeTracker(): JSX.Element {
   }
   const advanceRef = useRef(advance)
   advanceRef.current = advance
-
-  const addParty = (): void => {
-    const existing = new Set(units.map((u) => u.name.toLowerCase()))
-    pcs.forEach((pc) => {
-      if (existing.has(pc.name.toLowerCase())) return
-      addUnit({
-        name: pc.name,
-        isPC: true,
-        initiative: 0,
-        locked: false,
-        hpCurrent: pc.currentHp ?? pc.maxHp ?? 0,
-        hpMax: pc.maxHp ?? 0,
-        conditions: []
-      })
-    })
-  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -435,20 +581,31 @@ export function InitiativeTracker(): JSX.Element {
           <span className="text-sm text-ink-muted">
             Round <span className="text-lg font-semibold text-ink">{round}</span>
           </span>
-          <button type="button" className="btn-accent" onClick={advance} disabled={!units.length}>
+          <button type="button" className="btn-ghost" onClick={advance} disabled={!units.length}>
             <SkipForward size={15} />
             Next
             <kbd className="ml-1 rounded bg-black/20 px-1 text-[10px]">Space</kbd>
           </button>
         </div>
         {!isEmpty && (
-          <KebabMenu
-            onAdd={() => setAddOpen(true)}
-            onAddParty={addParty}
-            onRollAll={rollAll}
-            onReset={reset}
-            hasPcs={pcs.length > 0}
-          />
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={rollAll}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink"
+            >
+              <Dices size={13} />
+              Roll all
+            </button>
+            <button
+              type="button"
+              onClick={reset}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink"
+            >
+              <RotateCcw size={13} />
+              Reset
+            </button>
+          </div>
         )}
       </div>
 
@@ -463,12 +620,12 @@ export function InitiativeTracker(): JSX.Element {
             description="Add players and monsters, roll initiative, and run the fight — Space advances the turn."
           >
             <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={() => setAddOpen(true)}>
+              <button type="button" className="btn-ghost" onClick={onAdd}>
                 <Plus size={15} />
                 Add
               </button>
-              <button type="button" className="btn-ghost" onClick={addParty} disabled={!pcs.length}>
-                <Users size={15} />
+              <button type="button" className="btn-ghost" onClick={onAddParty}>
+                <Swords size={15} />
                 Add party
               </button>
             </div>
@@ -512,7 +669,7 @@ export function InitiativeTracker(): JSX.Element {
         )}
       </div>
 
-      {addOpen && <AddCombatantModal onClose={() => setAddOpen(false)} />}
+      {addOpen && <AddCombatantModal onClose={onCloseAdd} />}
     </div>
   )
 }

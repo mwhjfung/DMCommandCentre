@@ -14,6 +14,7 @@ export interface CombatUnit {
   locked: boolean
   hpCurrent: number
   hpMax: number
+  hpTemp: number
   conditions: string[]
 }
 
@@ -49,7 +50,7 @@ export const useCombatStore = create<CombatState>((set, get) => {
 
   return {
     units: [],
-    round: 1,
+    round: 0,
     turnId: null,
     loaded: false,
 
@@ -58,8 +59,8 @@ export const useCombatStore = create<CombatState>((set, get) => {
         stateKey()
       )
       set({
-        units: (saved?.units ?? []).map((u) => ({ ...u, locked: u.locked ?? false })),
-        round: saved?.round ?? 1,
+        units: (saved?.units ?? []).map((u) => ({ ...u, locked: u.locked ?? false, hpTemp: u.hpTemp ?? 0 })),
+        round: saved?.round ?? 0,
         turnId: saved?.turnId ?? null,
         loaded: true
       })
@@ -120,7 +121,7 @@ export const useCombatStore = create<CombatState>((set, get) => {
     },
 
     reset: () => {
-      set({ units: [], round: 1, turnId: null })
+      set({ units: [], round: 0, turnId: null })
       persist()
     }
   }
