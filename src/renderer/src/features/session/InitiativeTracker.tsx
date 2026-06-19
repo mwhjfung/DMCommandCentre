@@ -9,7 +9,8 @@ import {
   Lock,
   LockOpen,
   Search,
-  PanelRightClose
+  PanelRightClose,
+  Users
 } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { ContentDetail } from '@/components/ContentDetail'
@@ -17,7 +18,6 @@ import { useCombatStore, type CombatUnit } from '@/lib/store/combatStore'
 import { useContentStore } from '@/lib/store/contentStore'
 import { useUiStore } from '@/lib/store/uiStore'
 import { ConditionsCell } from './ConditionsCell'
-import { TypeBadge } from '@/components/ContentBadge'
 import { cn } from '@/lib/cn'
 import type { ContentEntry } from '@/types/content'
 
@@ -83,10 +83,7 @@ function EntryPickCard({
           : 'hover:border-accent/70 hover:bg-accent/5'
       )}
     >
-      <div className="flex items-center gap-2">
-        <TypeBadge type={entry.type} />
-      </div>
-      <span className="mt-1 w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
+      <span className="w-full truncate font-medium text-ink" title={entry.name}>{entry.name}</span>
       <span className="w-full truncate text-xs text-ink-muted" title={entry.summary || undefined}>{entry.summary || '—'}</span>
     </button>
   )
@@ -621,13 +618,13 @@ export function InitiativeTracker({
             description="Add players and monsters, roll initiative, and run the fight — Space advances the turn."
           >
             <div className="flex gap-2">
-              <button type="button" className="btn-ghost" onClick={onAdd}>
+              <button type="button" className="btn-ghost" onClick={onAddParty}>
+                <Users size={15} />
+                Add party
+              </button>
+              <button type="button" className="btn-accent" onClick={onAdd}>
                 <Plus size={15} />
                 Add
-              </button>
-              <button type="button" className="btn-ghost" onClick={onAddParty}>
-                <Swords size={15} />
-                Add party
               </button>
             </div>
           </EmptyState>

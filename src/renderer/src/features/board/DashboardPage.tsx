@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LayoutGrid, Maximize2, Minimize2, Plus, Library,
-  Archive, Pencil, X, Check, Trash2, RotateCcw, Users
+  Archive, Pencil, X, Check, Trash2, RotateCcw, Users, Copy
 } from 'lucide-react'
 import {
   DndContext,
@@ -28,6 +28,7 @@ import { SessionDialog } from './SessionDialog'
 import { getSetting, setSetting } from '@/lib/db/content'
 import { getActiveCampaignId } from '@/lib/store/activeCampaign'
 import type { ContentEntry } from '@/types/content'
+import { useNotesStore } from '@/lib/store/notesStore'
 import type { Note } from '@/lib/store/notesStore'
 import type { CombatUnit } from '@/lib/store/combatStore'
 import { cn } from '@/lib/cn'
@@ -44,6 +45,9 @@ const SECTION_TITLE: Record<SectionId, string> = {
 const fmtDate = (ts: number): string =>
   new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 
+const fmtFull = (ts: number): string =>
+  new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+
 // ---- dashboard page --------------------------------------------------------
 
 export function DashboardPage(): JSX.Element {
@@ -51,17 +55,13 @@ export function DashboardPage(): JSX.Element {
   const [expanded, setExpanded] = useState<SectionId | null>(null)
   const [mainTab, setMainTab] = useState<MainTab>('latest')
 
-  const section = (id: Exclude<SectionId, 'initiative'>): ReactNode => (
+  const section = (id: Exclude<SectionId, 'initiative' | 'notes'>): ReactNode => (
     <DashSection
       title={SECTION_TITLE[id]}
       expanded={expanded === id}
       onToggle={() => setExpanded((e) => (e === id ? null : id))}
     >
-      {id === 'pins' ? (
-        <PinnedBoard />
-      ) : (
-        <NotesPanel expanded={expanded === 'notes'} />
-      )}
+      <PinnedBoard />
     </DashSection>
   )
 
@@ -125,6 +125,11 @@ export function DashboardPage(): JSX.Element {
                       expanded={true}
                       onToggle={() => setExpanded(null)}
                     />
+                  ) : expanded === 'notes' ? (
+                    <NotesDashSection
+                      expanded={true}
+                      onToggle={() => setExpanded(null)}
+                    />
                   ) : (
                     section(expanded)
                   )}
@@ -141,7 +146,12 @@ export function DashboardPage(): JSX.Element {
                         onToggle={() => setExpanded('initiative')}
                       />
                     </div>
-                    <div className="min-w-0 flex-1">{section('notes')}</div>
+                    <div className="min-w-0 flex-1">
+                      <NotesDashSection
+                        expanded={false}
+                        onToggle={() => setExpanded('notes')}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -239,20 +249,8 @@ function InitiativeDashSection({
   return (
     <div className="panel flex h-full min-h-0 flex-col overflow-hidden">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        {/* Title + expand/collapse toggle always inline */}
-        <div className="flex items-center gap-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Initiative</span>
-          <button
-            type="button"
-            className="icon-btn h-5 w-5"
-            title={expanded ? 'Minimize' : 'Expand'}
-            onClick={onToggle}
-          >
-            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-          </button>
-        </div>
+        <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Initiative</span>
 
-        {/* Actions */}
         <div className="flex items-center gap-1.5">
           <SplitButton
             label="Add party"
@@ -290,6 +288,14 @@ function InitiativeDashSection({
             <Plus size={13} />
             Add
           </button>
+          <button
+            type="button"
+            className="icon-btn h-5 w-5"
+            title={expanded ? 'Minimize' : 'Expand'}
+            onClick={onToggle}
+          >
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
         </div>
       </div>
 
@@ -301,6 +307,75 @@ function InitiativeDashSection({
           onAddParty={addAllParty}
         />
       </div>
+    </div>
+  )
+}
+
+// ---- notes dash section ----------------------------------------------------
+
+function NotesDashSection({
+  expanded,
+  onToggle
+}: {
+  expanded: boolean
+  onToggle: () => void
+}): JSX.Element {
+  const notes = useNotesStore((s) => s.notes)
+  const add = useNotesStore((s) => s.add)
+  const [draft, setDraft] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  const submit = (): void => {
+    if (!draft.trim()) return
+    add(draft)
+    setDraft('')
+  }
+
+  const copyAll = (): void => {
+    const text = notes.map((n) => `[${fmtFull(n.createdAt)}] ${n.text}`).join('\n')
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div className="panel flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+          Notes{notes.length > 0 && ` (${notes.length})`}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {notes.length > 0 && (
+            <button
+              type="button"
+              className="flex h-[26px] items-center gap-1 rounded-md px-2.5 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink"
+              onClick={copyAll}
+            >
+              {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+              {copied ? 'Copied' : 'Copy all'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="flex h-[26px] items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-medium text-accent-fg hover:bg-accent-strong disabled:opacity-40"
+            disabled={!draft.trim()}
+            onClick={submit}
+          >
+            <Plus size={13} />
+            Add
+          </button>
+          <button
+            type="button"
+            className="icon-btn h-5 w-5"
+            title={expanded ? 'Minimize' : 'Expand'}
+            onClick={onToggle}
+          >
+            {expanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+          </button>
+        </div>
+      </div>
+      <NotesPanel expanded={expanded} draft={draft} setDraft={setDraft} onSubmit={submit} />
     </div>
   )
 }
