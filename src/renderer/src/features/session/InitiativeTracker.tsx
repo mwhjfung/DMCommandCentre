@@ -134,7 +134,7 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
 
   const canAdd = selectedEntry !== null || query.trim().length > 0
 
-  const doAdd = (closeAfter: boolean): void => {
+  const doAdd = (): void => {
     const n = Math.max(1, Math.floor(Number(count) || 1))
     const initVal = init !== '' ? Number(init) : 0
     if (selectedEntry) {
@@ -168,15 +168,11 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
         })
       }
     }
-    if (closeAfter) {
-      onClose()
-    } else {
-      setQuery('')
-      setSelectedEntry(null)
-      setCount(1)
-      setInit('')
-      searchRef.current?.focus()
-    }
+    setQuery('')
+    setSelectedEntry(null)
+    setCount(1)
+    setInit('')
+    searchRef.current?.focus()
   }
 
   return (
@@ -189,11 +185,8 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-ink">Add to initiative</h2>
-          <button type="button" className="icon-btn" onClick={onClose}>
-            <X size={16} />
-          </button>
         </div>
 
         {/* Search + Source */}
@@ -310,16 +303,15 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
             <button
               type="button"
               className="btn-ghost"
-              disabled={!canAdd}
-              onClick={() => doAdd(true)}
+              onClick={onClose}
             >
-              Add and close
+              Close
             </button>
             <button
               type="button"
               className="btn-accent"
               disabled={!canAdd}
-              onClick={() => doAdd(false)}
+              onClick={doAdd}
             >
               <Plus size={14} />
               Add to initiative
