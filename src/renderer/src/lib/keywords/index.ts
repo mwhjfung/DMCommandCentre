@@ -183,7 +183,14 @@ export function matchText(index: KeywordIndex, text: string, opts: MatchOptions)
     }
   }
 
-  return [...best.values()].sort((a, b) => b.score - a.score)
+  // For each matched span, keep only the highest-scoring entry — prevents one
+  // spoken word from surfacing every library entry that loosely contains it.
+  const bySpan = new Map<string, KeywordMatch>()
+  for (const m of best.values()) {
+    const prev = bySpan.get(m.matched)
+    if (!prev || m.score > prev.score) bySpan.set(m.matched, m)
+  }
+  return [...bySpan.values()].sort((a, b) => b.score - a.score)
 }
 
 /**

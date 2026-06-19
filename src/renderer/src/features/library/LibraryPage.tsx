@@ -10,7 +10,9 @@ import {
   FolderPlus,
   Pencil,
   FileDown,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { Page } from '@/components/Page'
 import { EmptyState } from '@/components/EmptyState'
@@ -50,6 +52,9 @@ export function LibraryPage(): JSX.Element {
 
   const searchRef = useRef<HTMLInputElement>(null)
   const sourceRef = useRef<HTMLDivElement>(null)
+  const chipsRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   const campaignSources = useMemo(
     () =>
@@ -102,6 +107,21 @@ export function LibraryPage(): JSX.Element {
     tabItems.forEach((i) => set.add(i.type))
     return (Object.keys(CONTENT_TYPE_LABELS) as ContentType[]).filter((t) => set.has(t))
   }, [tabItems])
+
+  // Track whether filter chip strip can scroll left/right — must be after typesPresent
+  useEffect(() => {
+    const el = chipsRef.current
+    if (!el) return
+    const update = (): void => {
+      setCanScrollLeft(el.scrollLeft > 0)
+      setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
+    }
+    update()
+    el.addEventListener('scroll', update)
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', update); ro.disconnect() }
+  }, [typesPresent])
 
   const filtered = useMemo(
     () => filterContent(tabItems, { query, types: activeTypes.size ? [...activeTypes] : undefined }),
@@ -169,6 +189,10 @@ export function LibraryPage(): JSX.Element {
           Edit source
         </button>
       )}
+      <button type="button" className="btn-ghost" onClick={() => setExportOpen(true)}>
+        <FileDown size={15} />
+        Export
+      </button>
       <button type="button" className="btn-accent" onClick={() => setAddOpen(true)}>
         <Plus size={15} />
         Add to library
@@ -245,7 +269,7 @@ export function LibraryPage(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => setSourceOpen((o) => !o)}
-                  className="input flex w-44 items-center justify-between gap-1.5 text-sm"
+                  className="input flex w-44 items-center justify-between gap-1.5 text-left text-sm"
                 >
                   <span className="truncate">{sourceLabel}</span>
                   <ChevronDown
@@ -259,23 +283,23 @@ export function LibraryPage(): JSX.Element {
                       type="button"
                       onClick={() => resetTabView(ALL_TAB)}
                       className={cn(
-                        'flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3',
+                        'flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-surface-3',
                         tab === ALL_TAB ? 'text-ink' : 'text-ink-muted'
                       )}
                     >
-                      <span>All sources</span>
-                      <span className="ml-4 text-xs text-ink-muted">{visibleItems.length}</span>
+                      <span className="truncate">All sources</span>
+                      <span className="ml-4 shrink-0 text-xs text-ink-muted">{visibleItems.length}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => resetTabView(SRD_SOURCE_ID)}
                       className={cn(
-                        'flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3',
+                        'flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-surface-3',
                         tab === SRD_SOURCE_ID ? 'text-ink' : 'text-ink-muted'
                       )}
                     >
-                      <span>SRD</span>
-                      <span className="ml-4 text-xs text-ink-muted">{srdCount}</span>
+                      <span className="truncate">SRD</span>
+                      <span className="ml-4 shrink-0 text-xs text-ink-muted">{srdCount}</span>
                     </button>
                     {campaignSources.map((s) => (
                       <button
@@ -283,12 +307,12 @@ export function LibraryPage(): JSX.Element {
                         type="button"
                         onClick={() => resetTabView(s.id)}
                         className={cn(
-                          'flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-surface-3',
+                          'flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-surface-3',
                           tab === s.id ? 'text-ink' : 'text-ink-muted'
                         )}
                       >
-                        <span>{s.name}</span>
-                        <span className="ml-4 text-xs text-ink-muted">{countFor(s.id)}</span>
+                        <span className="truncate">{s.name}</span>
+                        <span className="ml-4 shrink-0 text-xs text-ink-muted">{countFor(s.id)}</span>
                       </button>
                     ))}
                     <div className="my-1 border-t border-border" />
@@ -304,37 +328,51 @@ export function LibraryPage(): JSX.Element {
                 )}
               </div>
 
-              {/* Type filter chips */}
-              <div className="flex min-w-0 flex-wrap items-center gap-1">
-                {typesPresent.map((t) => (
+              {/* Type filter chips — horizontally scrollable strip with chevron controls */}
+              <div className="relative flex min-w-0 flex-1 items-center">
+                {canScrollLeft && (
                   <button
-                    key={t}
                     type="button"
-                    onClick={() => toggleType(t)}
-                    className={cn(
-                      'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-                      activeTypes.has(t)
-                        ? 'border-accent/60 bg-accent/15 text-accent'
-                        : 'border-border text-ink-muted hover:border-border-strong hover:text-ink'
-                    )}
+                    onClick={() => chipsRef.current?.scrollBy({ left: -120, behavior: 'smooth' })}
+                    className="mr-0.5 shrink-0 rounded p-0.5 text-ink-muted hover:bg-surface-3 hover:text-ink"
                   >
-                    {CONTENT_TYPE_LABELS[t]}
+                    <ChevronLeft size={14} />
                   </button>
-                ))}
+                )}
+                <div
+                  ref={chipsRef}
+                  className="flex min-w-0 gap-1 overflow-x-auto"
+                  style={{ scrollbarWidth: 'none' }}
+                >
+                  {typesPresent.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleType(t)}
+                      className={cn(
+                        'shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+                        activeTypes.has(t)
+                          ? 'border-accent/60 bg-accent/15 text-accent'
+                          : 'border-border text-ink-muted hover:border-border-strong hover:text-ink'
+                      )}
+                    >
+                      {CONTENT_TYPE_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+                {canScrollRight && (
+                  <button
+                    type="button"
+                    onClick={() => chipsRef.current?.scrollBy({ left: 120, behavior: 'smooth' })}
+                    className="ml-0.5 shrink-0 rounded p-0.5 text-ink-muted hover:bg-surface-3 hover:text-ink"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                )}
               </div>
 
-              {/* Count + export — always flush right, same line as search */}
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                <span className="text-xs text-ink-muted">{filtered.length} shown</span>
-                <button
-                  type="button"
-                  onClick={() => setExportOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-3 hover:text-ink"
-                >
-                  <FileDown size={14} />
-                  Export
-                </button>
-              </div>
+              {/* Count — flush right */}
+              <span className="ml-2 shrink-0 text-xs text-ink-muted">{filtered.length} shown</span>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">

@@ -113,8 +113,8 @@ export function AppLayout(): JSX.Element {
           <Outlet />
           <DetailDrawer />
         </main>
+        <VoiceDock />
       </div>
-      <VoiceDock />
       <EntryEditor />
       {importOpen && <ImportDialog />}
       <Toast />

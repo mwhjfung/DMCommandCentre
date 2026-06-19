@@ -8,7 +8,8 @@ import {
   Swords,
   Lock,
   LockOpen,
-  Search
+  Search,
+  PanelRightClose
 } from 'lucide-react'
 import { EmptyState } from '@/components/EmptyState'
 import { ContentDetail } from '@/components/ContentDetail'
@@ -134,7 +135,7 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
 
   const canAdd = selectedEntry !== null || query.trim().length > 0
 
-  const doAdd = (): void => {
+  const doAdd = (closeAfter = false): void => {
     const n = Math.max(1, Math.floor(Number(count) || 1))
     const initVal = init !== '' ? Number(init) : 0
     if (selectedEntry) {
@@ -172,7 +173,11 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
     setSelectedEntry(null)
     setCount(1)
     setInit('')
-    searchRef.current?.focus()
+    if (closeAfter) {
+      onClose()
+    } else {
+      searchRef.current?.focus()
+    }
   }
 
   return (
@@ -185,8 +190,11 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center border-b border-border px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-ink">Add to initiative</h2>
+          <button type="button" className="icon-btn" onClick={onClose}>
+            <X size={16} />
+          </button>
         </div>
 
         {/* Search + Source */}
@@ -254,12 +262,12 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
             <div className="flex w-[280px] shrink-0 flex-col border-l border-border">
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">Details</span>
-                <button type="button" className="icon-btn" onClick={() => setSelectedEntry(null)}>
-                  <X size={14} />
+                <button type="button" className="icon-btn" title="Close drawer" onClick={() => setSelectedEntry(null)}>
+                  <PanelRightClose size={15} />
                 </button>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <ContentDetail entry={selectedEntry} />
+                <ContentDetail entry={selectedEntry} hideAddToInitiative />
               </div>
             </div>
           )}
@@ -303,15 +311,16 @@ function AddCombatantModal({ onClose }: { onClose: () => void }): JSX.Element {
             <button
               type="button"
               className="btn-ghost"
-              onClick={onClose}
+              disabled={!canAdd}
+              onClick={() => doAdd(true)}
             >
-              Close
+              Add and close
             </button>
             <button
               type="button"
               className="btn-accent"
               disabled={!canAdd}
-              onClick={doAdd}
+              onClick={() => doAdd()}
             >
               <Plus size={14} />
               Add to initiative

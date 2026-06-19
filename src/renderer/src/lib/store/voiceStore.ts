@@ -103,6 +103,8 @@ interface VoiceState {
   surfaceContent: (contentId: string) => void
   /** Correct a transcript word to a chosen entry, learn it as an alias, surface it. */
   applyCorrection: (lineId: string, selectedText: string, contentId: string) => void
+  /** Re-link an existing transcript hit to a different content entry (no alias learning). */
+  reassignHit: (lineId: string, matched: string, contentId: string) => void
   /** Remove a learned correction. */
   removeAlias: (phrase: string) => void
   updateSettings: (patch: Partial<VoiceSettings>) => void
@@ -292,6 +294,24 @@ export const useVoiceStore = create<VoiceState>((set, get) => {
           },
           ...s.feed.filter((h) => h.contentId !== entry.id)
         ].slice(0, 200)
+      }))
+    },
+
+    reassignHit: (lineId, matched, contentId) => {
+      const entry = useContentStore.getState().visibleItems.find((i) => i.id === contentId)
+      if (!entry) return
+      set((s) => ({
+        transcriptLines: s.transcriptLines.map((l) => {
+          if (l.id !== lineId) return l
+          return {
+            ...l,
+            hits: l.hits.map((h) =>
+              h.matched === matched
+                ? { ...h, contentId: entry.id, term: entry.name, type: entry.type }
+                : h
+            )
+          }
+        })
       }))
     },
 

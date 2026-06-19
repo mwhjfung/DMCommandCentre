@@ -204,7 +204,7 @@ function SpellDetail({ entry }: { entry: ContentOfType<'spell'> }): JSX.Element 
   )
 }
 
-function MonsterDetail({ entry }: { entry: ContentOfType<'monster'> }): JSX.Element {
+function MonsterDetail({ entry, hideAddToInitiative }: { entry: ContentOfType<'monster'>; hideAddToInitiative?: boolean }): JSX.Element {
   const d = entry.data
   const abilities: Array<[string, number]> = [
     ['STR', d.abilities.str],
@@ -216,7 +216,7 @@ function MonsterDetail({ entry }: { entry: ContentOfType<'monster'> }): JSX.Elem
   ]
   return (
     <div className="space-y-4">
-      <AddToInitiativeButton entry={entry} />
+      {!hideAddToInitiative && <AddToInitiativeButton entry={entry} />}
       <p className="text-sm italic text-ink-muted">
         {[d.size, d.creatureType, d.alignment].filter(Boolean).join(' · ')}
       </p>
@@ -589,12 +589,12 @@ function HomebrewDetail({ entry }: { entry: Extract<ContentEntry, { type: 'homeb
   )
 }
 
-function DetailBody({ entry }: { entry: ContentEntry }): JSX.Element {
+function DetailBody({ entry, hideAddToInitiative }: { entry: ContentEntry; hideAddToInitiative?: boolean }): JSX.Element {
   switch (entry.type) {
     case 'spell':
       return <SpellDetail entry={entry} />
     case 'monster':
-      return <MonsterDetail entry={entry} />
+      return <MonsterDetail entry={entry} hideAddToInitiative={hideAddToInitiative} />
     case 'item':
       return <ItemDetail entry={entry} />
     case 'weapon':
@@ -618,7 +618,7 @@ function DetailBody({ entry }: { entry: ContentEntry }): JSX.Element {
   }
 }
 
-export function ContentDetail({ entry }: { entry: ContentEntry }): JSX.Element {
+export function ContentDetail({ entry, hideAddToInitiative }: { entry: ContentEntry; hideAddToInitiative?: boolean }): JSX.Element {
   return (
     <div className="space-y-5">
       <div className="space-y-2">
@@ -639,7 +639,7 @@ export function ContentDetail({ entry }: { entry: ContentEntry }): JSX.Element {
         )}
       </div>
 
-      <DetailBody entry={entry} />
+      <DetailBody entry={entry} hideAddToInitiative={hideAddToInitiative} />
 
       {entry.notes && (
         <Section title="Notes">

@@ -4,7 +4,8 @@ import { useUiStore } from '@/lib/store/uiStore'
 import { useVoiceStore } from '@/lib/store/voiceStore'
 import { useContentStore } from '@/lib/store/contentStore'
 import { KeywordCard } from './KeywordCard'
-import { TranscriptView } from './TranscriptView'
+import { TranscriptView, type HitSwapTarget } from './TranscriptView'
+import { HitPopover } from './HitPopover'
 import { cn } from '@/lib/cn'
 
 function CorrectionsPopover({ onClose }: { onClose: () => void }): JSX.Element {
@@ -84,6 +85,7 @@ export function VoiceDock(): JSX.Element | null {
   // Fraction of the split given to the transcript (top). Default 60/40.
   const [transcriptFraction, setTranscriptFraction] = useState(0.6)
   const [showCorrections, setShowCorrections] = useState(false)
+  const [hitSwap, setHitSwap] = useState<HitSwapTarget | null>(null)
   const splitRef = useRef<HTMLDivElement>(null)
   const transcriptRef = useRef<HTMLDivElement>(null)
 
@@ -121,7 +123,7 @@ export function VoiceDock(): JSX.Element | null {
   }
 
   return (
-    <aside className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-surface">
+    <aside className="relative flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-surface">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
         <div className="flex items-center gap-2">
           <Radio
@@ -181,7 +183,10 @@ export function VoiceDock(): JSX.Element | null {
                 {listening ? 'Listening…' : 'Press the button below to go live.'}
               </p>
             ) : (
-              <TranscriptView lines={recentTranscript} />
+              <TranscriptView
+              lines={recentTranscript}
+              onSwapClick={(target) => setHitSwap(target)}
+            />
             )}
           </div>
         </div>
@@ -249,6 +254,10 @@ export function VoiceDock(): JSX.Element | null {
             ? 'Recording live'
             : 'Off air'}
       </button>
+
+      {hitSwap && (
+        <HitPopover target={hitSwap} onClose={() => setHitSwap(null)} />
+      )}
     </aside>
   )
 }
